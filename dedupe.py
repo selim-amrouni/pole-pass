@@ -127,7 +127,14 @@ def main():
             fields[f], disagreement[f] = vote([c[f] for c in cls], f)
         lon = sum(r["lon"] for r in rs) / len(rs)
         lat = sum(r["lat"] for r in rs) / len(rs)
-        best = max(rs, key=lambda r: ((r.get("pole_px_h") or 0), r["classification"]["confidence"]))
+        # best crop: newest frame where the pole is still readable (>= 300 px), else the largest
+        readable = [r for r in rs if (r.get("pole_px_h") or 0) >= 300 and r.get("captured_at")]
+        best = max(readable, key=lambda r: r["captured_at"]) if readable else \
+               max(rs, key=lambda r: ((r.get("pole_px_h") or 0), r["classification"]["confidence"]))
+        frames = sorted(({"image_id": r["image_id"], "captured_at": r.get("captured_at"), "url": r["mapillary_url"],
+                          "px_h": r.get("pole_px_h"), "is_pano": r["is_pano"],
+                          "lean": r["classification"]["lean_severity"], "att": r["classification"]["attachment_count"],
+                          "shown": r is best} for r in rs), key=lambda f: f["captured_at"] or 0)
         sev = sum(SEVERITY[f].get(fields[f], 0) for f in SEVERITY)
         flags = [f for f in SEVERITY if SEVERITY[f].get(fields[f], 0) > 0]
         is_utility = bool(fields["pole_present"]) and fields["pole_type"] in UTILITY_TYPES
@@ -142,6 +149,7 @@ def main():
             "severity_score": sev, "flags": flags,
             "best_image_id": best["image_id"], "best_crop": best.get("crop"), "best_captured_at": best.get("captured_at"),
             "best_mapillary_url": best["mapillary_url"], "best_creator": best.get("creator"),
+            "best_is_newest": bool(readable), "frames": frames,
             "capture_first": min(r["captured_at"] for r in rs if r.get("captured_at")),
             "capture_last": max(r["captured_at"] for r in rs if r.get("captured_at")),
             "notes": [c["notes"] for c in cls if c.get("notes")][:3],

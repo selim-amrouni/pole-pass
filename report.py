@@ -55,8 +55,10 @@ def web_rows(poles, slug, out_dir):
         crop_rel = None
         if p.get("best_crop") and (ROOT / p["best_crop"]).exists():
             dst = crops_dir / f"{p['pole_id']}.jpg"
-            if not dst.exists():
-                with Image.open(ROOT / p["best_crop"]) as im:
+            src = ROOT / p["best_crop"]
+            if not dst.exists() or dst.stat().st_mtime < src.stat().st_mtime or dst.with_suffix(".src").read_text() != p["best_crop"] if dst.with_suffix(".src").exists() else True:
+                dst.with_suffix(".src").write_text(p["best_crop"])
+                with Image.open(src) as im:
                     im = im.convert("RGB")
                     im.thumbnail((WEB_CROP, WEB_CROP))
                     im.save(dst, "JPEG", quality=80)
@@ -71,6 +73,11 @@ def web_rows(poles, slug, out_dir):
             "n": p["n_observations"], "seq": p["n_sequences"],
             "date": ms_date(p.get("best_captured_at")), "first": ms_date(p.get("capture_first")), "last": ms_date(p.get("capture_last")),
             "url": p["best_mapillary_url"], "by": p.get("best_creator"), "crop": crop_rel,
+            "newest": p.get("best_is_newest", False),
+            "year": int(datetime.fromtimestamp(p["best_captured_at"] / 1000, tz=timezone.utc).year) if p.get("best_captured_at") else None,
+            "frames": [{"d": ms_date(f.get("captured_at")), "y": int(datetime.fromtimestamp(f["captured_at"] / 1000, tz=timezone.utc).year) if f.get("captured_at") else None,
+                        "u": f["url"], "px": f.get("px_h"), "pano": f.get("is_pano"), "lean": f.get("lean"), "att": f.get("att"), "shown": f.get("shown", False)}
+                       for f in p.get("frames", [])],
             "notes": p.get("notes", [])[:1],
         })
     return rows
@@ -195,6 +202,16 @@ ul.plain{{padding-left:18px;margin:8px 0}} ul.plain li{{margin:4px 0}}
 .tag.hot{{color:var(--orange)}} .tag.cool{{color:var(--teal)}} .tag.dim{{color:var(--ink-3)}}
 .card .x{{position:absolute;top:6px;right:8px;background:var(--paper);border:1px solid var(--ink);width:26px;height:26px;font-family:var(--mono);cursor:pointer}}
 .dl{{font-family:var(--mono);font-size:12.5px}} .dl a{{margin-right:14px}}
+.years{{margin:6px 0 16px}} .hist{{display:flex;align-items:flex-end;gap:2px;height:38px;margin:0 6px 4px}}
+.hist i{{flex:1;background:var(--ink-3);opacity:.35;min-height:2px;transition:opacity .15s,background .15s}} .hist i.in{{background:var(--orange);opacity:.9}}
+.slider{{position:relative;height:28px;margin:0 6px}}
+.slider input{{position:absolute;left:0;right:0;top:0;width:100%;margin:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none;height:28px}}
+.slider input::-webkit-slider-thumb{{pointer-events:auto;-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--paper);border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);cursor:ew-resize}}
+.slider input::-moz-range-thumb{{pointer-events:auto;width:16px;height:16px;border-radius:50%;background:var(--paper);border:2px solid var(--ink);cursor:ew-resize}}
+.slider .track{{position:absolute;left:0;right:0;top:13px;height:2px;background:var(--rule)}} .slider .fill{{position:absolute;top:13px;height:2px;background:var(--ink)}}
+.yl{{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;margin:0 6px}} .yl b{{font-weight:500;color:var(--orange)}}
+.frames{{margin:8px 0 0;padding:0;list-style:none;font-size:12.5px}} .frames li{{display:flex;gap:8px;padding:3px 0;border-top:1px dashed var(--rule)}} .frames li.shown{{font-weight:600}}
+.frames .d{{font-family:var(--mono);min-width:70px}} .frames .px{{color:var(--ink-3);font-family:var(--mono);font-size:11px}}
 .reveal{{opacity:0;transform:translateY(8px);animation:up .6s ease-out forwards}} @keyframes up{{to{{opacity:1;transform:none}}}}
 @media (max-width:900px){{.app{{grid-template-columns:1fr;height:auto}} .mapwrap{{height:70vh}} .report{{border-right:0;padding:24px 20px 60px}} h1{{font-size:34px}} .card{{width:calc(100% - 24px)}}}}
 </style>
@@ -232,6 +249,15 @@ ul.plain{{padding-left:18px;margin:8px 0}} ul.plain li{{margin:4px 0}}
     <button class="chip" data-f="veg">Vegetation touching <span class="n">{n_veg}</span></button>
     <button class="chip" data-f="xfmr">Transformer <span class="n">{n_xfmr}</span></button>
     <button class="chip" data-f="nonutil">Not a utility pole <span class="n">{len(rows) - n_util}</span></button>
+  </div>
+
+  <div class="years">
+    <p class="fine" style="margin:0 0 4px">Photo year of the frame shown. Drag either end.</p>
+    <div class="hist" id="hist"></div>
+    <div class="slider"><div class="track"></div><div class="fill" id="fill"></div>
+      <input type="range" id="y0" min="{coverage['capture_first'][:4]}" max="{coverage['capture_last'][:4]}" value="{coverage['capture_first'][:4]}" step="1">
+      <input type="range" id="y1" min="{coverage['capture_first'][:4]}" max="{coverage['capture_last'][:4]}" value="{coverage['capture_last'][:4]}" step="1"></div>
+    <div class="yl"><span id="yl0"></span><span id="ycount"></span><span id="yl1"></span></div>
   </div>
 
   <h2>Worklist</h2>
@@ -272,8 +298,11 @@ const FILTERS = {{
   xarm: r=>r.util&&r.xarm==='damaged', veg: r=>r.util&&r.veg==='touching', xfmr: r=>r.util&&r.xfmr, nonutil: r=>!r.util
 }};
 let active = 'all';
+const YMIN = +document.getElementById('y0').min, YMAX = +document.getElementById('y1').max;
+let y0 = YMIN, y1 = YMAX;
+const inYears = r => r.year == null || (r.year >= y0 && r.year <= y1);
 function color(r){{ if(!r.util) return '#f3eee4'; if(r.sev>=2) return '#e0530f'; if(r.sev===1) return '#f3a67a'; if(r.att>=3) return '#1f6f6b'; return '#f3eee4'; }}
-function fc(){{ return {{type:'FeatureCollection', features:P.filter(FILTERS[active]).map(r=>({{type:'Feature', geometry:{{type:'Point', coordinates:[r.lon,r.lat]}},
+function fc(){{ return {{type:'FeatureCollection', features:P.filter(r=>FILTERS[active](r)&&inYears(r)).map(r=>({{type:'Feature', geometry:{{type:'Point', coordinates:[r.lon,r.lat]}},
   properties:{{id:r.id, c:color(r), dashed:!r.util, big:(r.sev>=2||r.att>=3)?1:0}}}}))}}; }}
 map.on('load', ()=>{{
   map.addSource('poles', {{type:'geojson', data:fc()}});
@@ -288,9 +317,25 @@ map.on('load', ()=>{{
 document.getElementById('chips').addEventListener('click', e=>{{
   const b = e.target.closest('.chip'); if(!b) return;
   active = b.dataset.f; document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on', c===b));
-  map.getSource('poles').setData(fc());
+  syncYears();
 }});
 const byId = Object.fromEntries(P.map(r=>[r.id,r]));
+// year slider + histogram
+const hist = document.getElementById('hist');
+const counts = {{}}; P.filter(r=>r.util&&r.year).forEach(r=>counts[r.year]=(counts[r.year]||0)+1);
+const cmax = Math.max(1, ...Object.values(counts));
+for(let y=YMIN;y<=YMAX;y++){{ const b=document.createElement('i'); b.title=`${{y}}: ${{counts[y]||0}} poles`; b.style.height=`${{Math.max(2,100*(counts[y]||0)/cmax)}}%`; b.dataset.y=y; hist.appendChild(b); }}
+function syncYears(){{
+  const a=document.getElementById('y0'), b=document.getElementById('y1');
+  y0=Math.min(+a.value,+b.value); y1=Math.max(+a.value,+b.value);
+  document.getElementById('yl0').textContent=y0; document.getElementById('yl1').textContent=y1;
+  const f=document.getElementById('fill'); f.style.left=`${{100*(y0-YMIN)/(YMAX-YMIN||1)}}%`; f.style.width=`${{100*(y1-y0)/(YMAX-YMIN||1)}}%`;
+  hist.querySelectorAll('i').forEach(i=>i.classList.toggle('in', +i.dataset.y>=y0 && +i.dataset.y<=y1));
+  const n=P.filter(r=>FILTERS[active](r)&&inYears(r)).length; document.getElementById('ycount').innerHTML=`<b>${{n}}</b> shown`;
+  if(map.getSource && map.getSource('poles')) map.getSource('poles').setData(fc());
+}}
+['y0','y1'].forEach(id=>document.getElementById(id).addEventListener('input', syncYears));
+map.on('load', syncYears); syncYears();
 function tag(t, cls){{ return `<span class="tag ${{cls}}">${{t}}</span>`; }}
 function openCard(id){{
   const r = byId[id]; if(!r) return;
@@ -307,12 +352,12 @@ function openCard(id){{
     <h3>${{r.util ? (r.type==='wood_utility'?'Wood utility pole':'Utility pole') : r.type.replace('_',' ')}}</h3>
     <div>${{flags.join('')}}</div>
     <div class="kv" style="margin-top:8px">
-      <b>photo</b><span>${{r.date}} · <a href="${{r.url}}" target="_blank" rel="noopener">open on Mapillary ↗</a>${{r.by?` · by ${{r.by}}`:''}}</span>
-      <b>frames</b><span>${{r.n}} from ${{r.seq}} sequence${{r.seq===1?'':'s'}}, ${{r.first}}${{r.first!==r.last?' to '+r.last:''}}</span>
-      <b>agreement</b><span>${{agree}}</span>
-      <b>confidence</b><span>${{r.conf}}</span>
+      <b>photo</b><span>${{r.date}}, ${{r.newest?'newest readable frame':'clearest frame (newer ones too small)'}} · <a href="${{r.url}}" target="_blank" rel="noopener">open on Mapillary ↗</a>${{r.by?` · by ${{r.by}}`:''}}</span>
+      <b>agreement</b><span>${{agree}} <span class="fine">(share of frames voting with the result)</span></span>
+      <b>self-rating</b><span>${{r.conf}} <span class="fine">model's own 0–1 rating, uncalibrated; see precision table</span></span>
       ${{r.notes&&r.notes[0]?`<b>note</b><span>${{r.notes[0]}}</span>`:''}}
-    </div>`;
+    </div>
+    <ul class="frames">${{r.frames.map(f=>`<li class="${{f.shown?'shown':''}}"><span class="d">${{f.d}}</span><a href="${{f.u}}" target="_blank" rel="noopener">${{f.pano?'360°':'photo'}} ↗</a><span class="px">${{f.px}}px · ${{f.lean}} · ${{f.att}} att</span>${{f.shown?'<span class="px">← shown</span>':''}}</li>`).join('')}}</ul>`;
   document.getElementById('card').classList.add('show');
   map.flyTo({{center:[r.lon,r.lat], zoom:Math.max(map.getZoom(),17), speed:0.8}});
 }}
