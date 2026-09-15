@@ -19,3 +19,7 @@
   message, so ten calls were logged as generic failures. Always surface the
   API error text in the dropped reason. Put value ranges in the prompt, not
   the schema.
+
+- **A predicate test caught a copy-paste branch bug** (`state.other ? !isUtility : !isUtility`).
+  Shared predicates for summaries, filters, and exports must have a unit test per
+  branch; the bug would have shown poles under "other detected objects" silently.

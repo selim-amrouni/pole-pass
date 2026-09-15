@@ -37,8 +37,11 @@ to its source photo.
 5. `validate.py` sample 50 poles, write a CSV for hand grading, compute
    precision per flag type. Do not skip. The precision table is the only part
    of the writeup anyone will trust.
-6. `map.html` MapLibre + OSM tiles, colored by flag severity, each point links
-   to its Mapillary image URL.
+6. `report.py` fills `web/index.html` and copies `web/{style.css,app.js,predicates.js}`
+   into `out/<slug>/` with `data.js`, exports, and per-frame images. Page copy
+   lives in the template; counts are computed in the browser from data via
+   `web/predicates.js`, which mirrors `condition_flags()` in dedupe.py. Tests:
+   `node --test tests/`.
 
 Stretch: diff against OpenStreetMap `power=pole` in the same bbox via Overpass
 and report how many detected assets are absent from OSM.

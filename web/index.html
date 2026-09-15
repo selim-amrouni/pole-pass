@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pole Pass · {{LOCATION}}</title>
+<meta name="description" content="Utility poles from street-level photos in {{LOCATION}}. An experiment with public Mapillary imagery.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:wght@500&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="hdr">
+  <span class="brand">Pole Pass</span>
+  <span class="loc">{{LOCATION}}</span>
+  <nav>
+    <a class="btn" href="#about">About</a>
+    {{CONTACT_NAV}}
+  </nav>
+</header>
+
+<section class="intro">
+  <h1>Utility poles from street-level photos</h1>
+  <p>I used public Mapillary photos to identify poles, estimate visible attachments, and flag possible condition issues in Greenpoint. Open a pole to check the photos and the model's assessment.</p>
+  <p class="notice">{{VALIDATION_NOTICE}}</p>
+</section>
+
+<section class="summary" id="summary" aria-label="Summary"></section>
+<p class="meta">Report generated {{GENERATED}}. Dataset version <span class="mono">{{VERSION}}</span>. Counts are model estimates from the records in this dataset.</p>
+
+<div class="tabs" role="tablist" aria-label="View">
+  <button class="btn" role="tab" id="tab-list" aria-selected="true" data-tab="list">List</button>
+  <button class="btn" role="tab" id="tab-map" aria-selected="false" data-tab="map">Map</button>
+  <button class="btn" id="filters-toggle" aria-expanded="false" aria-controls="toolbar" style="margin-left:auto">Filters</button>
+</div>
+
+<div class="toolbar" id="toolbar">
+  <div class="chips" id="chips" role="group" aria-label="Model flag filters"></div>
+  <div class="tb-group">
+    <label for="year-min">Photo date</label>
+    <input type="number" id="year-min" aria-label="Earliest photo year" inputmode="numeric">
+    <span aria-hidden="true">to</span>
+    <input type="number" id="year-max" aria-label="Latest photo year" inputmode="numeric">
+    <button class="btn sm" id="recent" aria-pressed="false" title="Photo taken in the last five years">Recent photos</button>
+  </div>
+  <div class="tb-group">
+    <label for="sort">Sort</label>
+    <select id="sort">
+      <option value="date_desc">Photo date, newest first</option>
+      <option value="date_asc">Photo date, oldest first</option>
+      <option value="att_desc">Attachment estimate, highest first</option>
+      <option value="flags_desc">Model flags, most first</option>
+    </select>
+  </div>
+  <button class="btn sm" id="reset">Reset filters</button>
+  <details class="adv">
+    <summary>Advanced</summary>
+    <label><input type="checkbox" id="other"> Other detected objects (not utility poles) instead of poles</label>
+  </details>
+  <span class="spacer"></span>
+  <div class="menu">
+    <button class="btn sm" id="export-btn" aria-haspopup="true" aria-expanded="false">Export results</button>
+    <div class="menu-list" id="export-menu" hidden>
+      <div class="h">Filtered results</div>
+      <button id="exp-csv-f">CSV</button><button id="exp-geo-f">GeoJSON</button>
+      <div class="h">All records</div>
+      <a href="poles.csv" download>CSV</a><a href="poles.geojson" download>GeoJSON</a>
+      <div class="h">Your review decisions (this browser)</div>
+      <button id="exp-review">JSON</button>
+    </div>
+  </div>
+</div>
+
+<div class="ws" id="ws" data-tab="list">
+  <section class="pane" aria-label="Poles to review">
+    <div class="pane-h"><h2>Poles to review</h2><p>Open a pole to review its photos.</p></div>
+    <div class="count" id="count" aria-live="polite"></div>
+    <div class="list" id="list" role="listbox" aria-label="Pole records"></div>
+  </section>
+  <section class="mapwrap" aria-label="Map">
+    <div id="map"></div>
+    <div class="map-tools"><button class="btn sm" id="fit">Fit results</button><button class="btn sm" id="resetview">Reset view</button></div>
+    <div class="legend" id="legend"></div>
+  </section>
+  <aside class="detail" id="detail" aria-label="Pole details" hidden></aside>
+</div>
+
+<dialog class="lb" id="lb" aria-label="Enlarged photo">
+  <div class="bar"><span id="lb-cap"></span><a id="lb-src" target="_blank" rel="noopener">Open source photo</a><button class="btn sm" id="lb-close" aria-label="Close enlarged photo">Close</button></div>
+  <img id="lb-img" alt="">
+</dialog>
+
+<section class="about" id="about">
+  <h2>About this demo</h2>
+  <p>This is a small experiment using public street-level imagery in Greenpoint. The aim is to see what is useful for an initial asset review, and where the photos are insufficient.</p>
+
+  <h2>How it works</h2>
+  <p>Mapillary detections locate candidate poles. A vision model reviews cropped photos for pole type, visible equipment, attachments, and possible condition issues. Nearby detections are grouped into pole records. Where several photos are available, the results are compared.</p>
+  <details><summary>Technical details</summary>{{TECH_DETAILS}}</details>
+
+  <h2>What the photos cannot establish</h2>
+  <p>These photos do not establish structural condition, electrical loading, attachment ownership, or compliance. Old, blurred, obstructed, or distorted images can give misleading results. A record with no model flag has not been cleared by an inspection.</p>
+
+  <h2>Validation</h2>
+  {{VALIDATION_SECTION}}
+
+  {{CONTACT_SECTION}}
+</section>
+<footer class="foot">
+  <p>Built by Selim Amrouni.</p>
+  <p>{{ATTRIBUTION}}</p>
+</footer>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="predicates.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

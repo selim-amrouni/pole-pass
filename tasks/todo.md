@@ -35,6 +35,28 @@ First three candidates (Tier 1, P1 call first, Not contacted, compact territory)
 - [ ] Stretch: Overpass diff vs OSM power=pole
 - [ ] Writeup with every number traced to data/
 
+## Page rework (spec received 2026-09-15)
+Approach: move the page out of the report.py f-string into web/ (index.html template,
+style.css, app.js, predicates.js). report.py fills the template and writes data.js with
+records + meta. Counts computed in JS from data via shared predicates, tested with node.
+
+- [x] dedupe.py: exact per-field votes, per-frame details (note, values), condition_flags
+      predicate replaces severity_score, latest_available_at from all frames incl. unclassified
+- [x] report.py: template fill, data.js {meta, records}, publish per-frame crops for compare,
+      no contact button when unconfigured, validation only from a real file
+- [x] web/predicates.js: shared flag predicates + summary counts (browser + node)
+- [x] web/app.js: state (filters, sort, page, selection, color mode), list, map w/ fallback,
+      detail pane (frames, compare, agreement w/ counts, review decisions in localStorage
+      keyed by dataset version, deep link #pole=), exports (filtered/all/review), mobile tabs
+- [x] web/style.css: flat, one sans (IBM Plex Sans), mono for ids/numbers, one accent, orange
+      only for possible issues, focus rings, reduced motion, 3 breakpoints
+- [x] copy: exact strings from spec; About / How it works / Technical details / Limitations /
+      Validation / Try another area; byline Selim
+- [x] initial example record chosen after viewing its image (config in report.py)
+- [x] tests: node tests for predicates + init without maplibregl
+- [x] verify: 1440 / 1024 / 390 layouts by reading rendered DOM structure, deep link, empty state
+- [x] no deploy; local preview only
+
 ## Review
 ### Step 3-4 Greenpoint classification (2026-09-15, data/poles/greenpoint-brooklyn-new-york/summary.json)
 - 3,244 observations classified, $3.88, zero malformed responses (schema enforced by API)

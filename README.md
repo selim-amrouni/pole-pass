@@ -18,8 +18,12 @@ Live demo (Greenpoint, Brooklyn): https://selim-amrouni.github.io/pole-pass/
    disagreement rate as a reliability signal.
 5. `validate.py` writes a stratified 50-pole CSV for hand grading and computes
    precision per flag. The precision table is the part to trust.
-6. `report.py` renders `out/<territory>/`: a MapLibre page, GeoJSON, worklist
-   CSV, and web crops. `deploy.sh` pushes it to GitHub Pages.
+6. `report.py` fills `web/index.html` and copies `web/*.{css,js}` into
+   `out/<territory>/` with `data.js`, CSV and GeoJSON exports, and per-photo
+   images. `deploy.sh` pushes that folder to GitHub Pages.
+
+Tests: `node --test tests/*.test.js` covers the shared filter predicates and
+initialization without a map library.
 
 `run.py` chains 1 through 6. Everything caches under `data/`; a rerun makes no
 API calls.
@@ -34,7 +38,11 @@ uv run python3 run.py --town "Greenpoint, Brooklyn, New York"                   
 ```
 
 Then grade `data/validate/<slug>/sample.csv`, run `validate.py --score`, and
-rerun `report.py`.
+rerun `report.py`. Until a `precision.json` exists the page states that no
+validation results are published.
+
+Pass `--contact mailto:...` to `report.py` to show a contact button; without
+it the page has none.
 
 ## Honest limits
 

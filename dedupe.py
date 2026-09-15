@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""Step 4: merge per-frame observations into poles.
+"""Step 4: merge per-frame observations into pole records.
 
 Usage:
   uv run python3 dedupe.py --town "Greenpoint, Brooklyn, New York" [--radius 8]
 
 Reads  data/classify/<slug>/classifications.jsonl
-Writes data/poles/<slug>/poles.jsonl      one row per pole
-       data/poles/<slug>/summary.json     counts that the report and webapp cite
+Writes data/poles/<slug>/poles.jsonl      one row per pole record
+       data/poles/<slug>/summary.json     counts the report cites
 
-Two-level grouping:
-  1. Every observation already carries Mapillary's feature_id, so frames of the
-     same feature merge first.
-  2. Features within --radius meters of each other merge too, since Mapillary
-     sometimes emits two features for one physical pole (different sequences,
-     different years). Single-linkage on a grid, no dependencies.
+Grouping (estimates, not verified):
+  1. Frames that Mapillary attributes to the same map feature merge first.
+  2. Features whose points are within --radius meters merge (single linkage on
+     a grid). Mapillary sometimes emits two features for one pole; the radius
+     can also merge distinct nearby objects or leave duplicates.
 
-Per field: majority vote over observations, ties broken toward the more
-conservative value (lower severity / unclear). disagreement rate per field =
-share of observations that differ from the winner, which is the reliability
-signal the report shows. Observations classified as street_light,
-traffic_signal, or other are kept in the row but do not count as utility poles.
+Per field: majority vote over classified frames, ties toward the more
+conservative value. Exact vote counts are kept per field. Frames from one
+drive are correlated, so several frames are not independent assessments.
+
+Condition flag predicate (shared with web/predicates.js, keep in sync):
+  lean in {moderate, severe} -> "lean"; crossarm == damaged -> "crossarm";
+  vegetation == touching -> "vegetation".
 """
 import argparse
 import json
@@ -33,8 +34,7 @@ from coverage import DATA, ROOT, slugify
 
 VOTE_FIELDS = ["pole_present", "pole_type", "material", "lean_severity", "crossarm_condition",
                "transformer_present", "vegetation_contact", "attachment_count"]
-# tie-break order: index 0 wins ties (conservative)
-TIE_ORDER = {
+TIE_ORDER = {  # index 0 wins ties (conservative)
     "lean_severity": ["unclear", "none", "slight", "moderate", "severe"],
     "crossarm_condition": ["unclear", "none_visible", "intact", "damaged"],
     "vegetation_contact": ["unclear", "none", "near", "touching"],
@@ -42,11 +42,19 @@ TIE_ORDER = {
     "material": ["unclear", "wood", "concrete", "steel", "fiberglass"],
 }
 UTILITY_TYPES = {"wood_utility", "concrete_or_steel_utility"}
-SEVERITY = {  # points per flag; summed into a 0..n score for map coloring
-    "lean_severity": {"moderate": 1, "severe": 2},
-    "crossarm_condition": {"damaged": 2},
-    "vegetation_contact": {"near": 0, "touching": 1},
-}
+READABLE_PX = 300  # newest frame at or above this height is the displayed photo
+
+
+def condition_flags(fields):
+    """The one predicate for 'possible condition issue'. Mirrors web/predicates.js."""
+    out = []
+    if fields["lean_severity"] in ("moderate", "severe"):
+        out.append("lean")
+    if fields["crossarm_condition"] == "damaged":
+        out.append("crossarm")
+    if fields["vegetation_contact"] == "touching":
+        out.append("vegetation")
+    return out
 
 
 def haversine_m(lon1, lat1, lon2, lat2):
@@ -57,8 +65,7 @@ def haversine_m(lon1, lat1, lon2, lat2):
 
 
 def cluster(points, radius_m):
-    """points: {id: (lon, lat)}. Single-linkage within radius via a coarse grid. Returns {id: cluster_idx}."""
-    cell = radius_m / 111320.0  # degrees of latitude per cell, roughly radius
+    cell = radius_m / 111320.0
     grid = defaultdict(list)
     for pid, (lon, lat) in points.items():
         grid[(int(lon / cell), int(lat / cell))].append(pid)
@@ -93,7 +100,7 @@ def vote(values, field):
         w = min(winners)
     else:
         w = False if False in winners else winners[0]
-    return w, round(1 - top / len(values), 2)
+    return w, {str(k): n for k, n in sorted(c.items(), key=lambda kv: -kv[1])}
 
 
 def main():
@@ -106,53 +113,61 @@ def main():
     if not src.exists():
         sys.exit(f"run classify.py first, missing {src}")
     rows = [json.loads(l) for l in src.open()]
-    obs = [r for r in rows if r.get("classification")]
-    dropped = [r for r in rows if not r.get("classification")]
+    classified = [r for r in rows if r.get("classification")]
 
-    # level 1: by feature; level 2: features within radius
-    by_feat = defaultdict(list)
-    for r in obs:
-        by_feat[r["feature_id"]].append(r)
+    by_feat, all_by_feat = defaultdict(list), defaultdict(list)
+    for r in rows:
+        all_by_feat[r["feature_id"]].append(r)
+        if r.get("classification"):
+            by_feat[r["feature_id"]].append(r)
     feat_pts = {fid: (rs[0]["lon"], rs[0]["lat"]) for fid, rs in by_feat.items()}
     cid_of = cluster(feat_pts, args.radius)
     groups = defaultdict(list)
     for fid, cid in cid_of.items():
-        groups[cid].extend(by_feat[fid])
+        groups[cid].append(fid)
 
     poles = []
-    for cid, rs in sorted(groups.items()):
+    for cid, fids in sorted(groups.items()):
+        rs = [r for f in fids for r in by_feat[f]]
+        every = [r for f in fids for r in all_by_feat[f]]  # includes frames skipped as too small
         cls = [r["classification"] for r in rs]
-        fields, disagreement = {}, {}
+        fields, votes = {}, {}
         for f in VOTE_FIELDS:
-            fields[f], disagreement[f] = vote([c[f] for c in cls], f)
+            fields[f], votes[f] = vote([c[f] for c in cls], f)
         lon = sum(r["lon"] for r in rs) / len(rs)
         lat = sum(r["lat"] for r in rs) / len(rs)
-        # best crop: newest frame where the pole is still readable (>= 300 px), else the largest
-        readable = [r for r in rs if (r.get("pole_px_h") or 0) >= 300 and r.get("captured_at")]
+        readable = [r for r in rs if (r.get("pole_px_h") or 0) >= READABLE_PX and r.get("captured_at")]
         best = max(readable, key=lambda r: r["captured_at"]) if readable else \
                max(rs, key=lambda r: ((r.get("pole_px_h") or 0), r["classification"]["confidence"]))
-        frames = sorted(({"image_id": r["image_id"], "captured_at": r.get("captured_at"), "url": r["mapillary_url"],
-                          "px_h": r.get("pole_px_h"), "is_pano": r["is_pano"],
-                          "lean": r["classification"]["lean_severity"], "att": r["classification"]["attachment_count"],
-                          "shown": r is best} for r in rs), key=lambda f: f["captured_at"] or 0)
-        sev = sum(SEVERITY[f].get(fields[f], 0) for f in SEVERITY)
-        flags = [f for f in SEVERITY if SEVERITY[f].get(fields[f], 0) > 0]
+        dated = [r for r in every if r.get("captured_at")]
+        latest = max(dated, key=lambda r: r["captured_at"]) if dated else None
+        frames = sorted(({
+            "image_id": r["image_id"], "captured_at": r.get("captured_at"), "url": r["mapillary_url"],
+            "px_h": r.get("pole_px_h"), "is_pano": r["is_pano"], "sequence": r["sequence"], "crop": r.get("crop"),
+            "creator": r.get("creator"),
+            "pole_type": r["classification"]["pole_type"], "lean": r["classification"]["lean_severity"],
+            "crossarm": r["classification"]["crossarm_condition"], "vegetation": r["classification"]["vegetation_contact"],
+            "transformer": r["classification"]["transformer_present"], "attachments": r["classification"]["attachment_count"],
+            "confidence": r["classification"]["confidence"], "note": r["classification"].get("notes") or "",
+            "shown": r is best,
+        } for r in rs), key=lambda f: f["captured_at"] or 0)
         is_utility = bool(fields["pole_present"]) and fields["pole_type"] in UTILITY_TYPES
         poles.append({
             "pole_id": f"{slug[:4]}-{cid:05d}", "lon": round(lon, 7), "lat": round(lat, 7),
-            "feature_ids": sorted({r["feature_id"] for r in rs}),
-            "n_observations": len(rs), "n_sequences": len({r["sequence"] for r in rs}),
-            "is_utility_pole": is_utility,
-            **fields,
-            "disagreement": disagreement,
+            "feature_ids": sorted(fids), "n_observations": len(rs), "n_frames_available": len(every),
+            "n_sequences": len({r["sequence"] for r in rs}),
+            "is_utility_pole": is_utility, **fields, "votes": votes,
+            "condition_flags": condition_flags(fields),
             "mean_confidence": round(sum(c["confidence"] for c in cls) / len(cls), 2),
-            "severity_score": sev, "flags": flags,
             "best_image_id": best["image_id"], "best_crop": best.get("crop"), "best_captured_at": best.get("captured_at"),
             "best_mapillary_url": best["mapillary_url"], "best_creator": best.get("creator"),
-            "best_is_newest": bool(readable), "frames": frames,
+            "best_px_h": best.get("pole_px_h"), "best_is_newest": bool(readable),
+            "latest_available_at": latest["captured_at"] if latest else None,
+            "latest_available_url": latest["mapillary_url"] if latest else None,
+            "latest_available_classified": bool(latest and latest.get("classification")) if latest else None,
             "capture_first": min(r["captured_at"] for r in rs if r.get("captured_at")),
             "capture_last": max(r["captured_at"] for r in rs if r.get("captured_at")),
-            "notes": [c["notes"] for c in cls if c.get("notes")][:3],
+            "frames": frames,
         })
 
     out_dir = DATA / "poles" / slug
@@ -162,35 +177,27 @@ def main():
             fh.write(json.dumps(p) + "\n")
 
     util = [p for p in poles if p["is_utility_pole"]]
-    types = Counter(p["pole_type"] for p in poles)
-    att = Counter(p["attachment_count"] for p in util)
     summary = {
-        "slug": slug, "radius_m": args.radius,
-        "observations_classified": len(obs), "observations_dropped": len(dropped),
-        "features": len(by_feat), "poles": len(poles), "utility_poles": len(util),
-        "poles_by_type": dict(types.most_common()),
-        "merged_multi_feature_poles": sum(1 for p in poles if len(p["feature_ids"]) > 1),
-        "attachment_histogram": {str(k): v for k, v in sorted(att.items())},
-        "utility_poles_3plus_attachments": sum(1 for p in util if p["attachment_count"] >= 3),
-        "flags": {f: Counter(p[f] for p in util) for f in SEVERITY},
-        "transformers": sum(1 for p in util if p["transformer_present"]),
-        "severity_histogram": dict(sorted(Counter(p["severity_score"] for p in util).items())),
-        "mean_disagreement": {f: round(sum(p["disagreement"][f] for p in poles) / max(len(poles), 1), 3) for f in VOTE_FIELDS},
-        "multi_observation_poles": sum(1 for p in poles if p["n_observations"] > 1),
+        "slug": slug, "radius_m": args.radius, "readable_px": READABLE_PX,
+        "frames_total": len(rows), "frames_classified": len(classified), "frames_skipped": len(rows) - len(classified),
+        "features_with_classified_frame": len(by_feat), "records": len(poles), "utility_records": len(util),
+        "other_records": len(poles) - len(util), "records_by_type": dict(Counter(p["pole_type"] for p in poles).most_common()),
+        "records_merged_from_multiple_features": sum(1 for p in poles if len(p["feature_ids"]) > 1),
+        "utility_with_condition_flag": sum(1 for p in util if p["condition_flags"]),
+        "utility_flag_counts": dict(Counter(f for p in util for f in p["condition_flags"])),
+        "utility_3plus_attachments": sum(1 for p in util if p["attachment_count"] >= 3),
+        "utility_transformer": sum(1 for p in util if p["transformer_present"]),
+        "attachment_histogram": {str(k): v for k, v in sorted(Counter(p["attachment_count"] for p in util).items())},
+        "single_frame_records": sum(1 for p in poles if p["n_observations"] == 1),
         "generated_at": datetime.now(tz=timezone.utc).isoformat(timespec="seconds"),
         "attribution": "Imagery and detections: Mapillary, CC BY-SA 4.0. Derived data: ODbL.",
     }
-    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=dict))
-
-    print(f"{slug}: {len(obs)} observations -> {len(by_feat)} features -> {len(poles)} poles "
-          f"({summary['merged_multi_feature_poles']} merged from multiple features), {len(dropped)} observations dropped")
-    print(f"pole types      {dict(types.most_common())}")
-    print(f"utility poles   {len(util)}   with 3+ attachments {summary['utility_poles_3plus_attachments']}   transformers {summary['transformers']}")
-    for f in SEVERITY:
-        print(f"{f:20} {dict(summary['flags'][f])}")
-    print(f"attachments     {summary['attachment_histogram']}")
-    print(f"disagreement    " + ", ".join(f"{f}={v}" for f, v in summary['mean_disagreement'].items() if f != 'pole_present'))
-    print(f"files           {out_dir.relative_to(ROOT)}/{{poles.jsonl,summary.json}}")
+    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+    print(f"{slug}: {len(classified)} frames -> {len(by_feat)} features -> {len(poles)} records "
+          f"({summary['records_merged_from_multiple_features']} merged from multiple features); {len(util)} utility")
+    print(f"condition flags {summary['utility_flag_counts']}  records with any {summary['utility_with_condition_flag']}  "
+          f"3+ att {summary['utility_3plus_attachments']}  transformer {summary['utility_transformer']}  single-frame {summary['single_frame_records']}")
+    print(f"files {out_dir.relative_to(ROOT)}/{{poles.jsonl,summary.json}}")
 
 
 if __name__ == "__main__":
