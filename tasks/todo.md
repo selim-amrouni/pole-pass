@@ -30,7 +30,8 @@ First three candidates (Tier 1, P1 call first, Not contacted, compact territory)
 - [x] Report rendered on full data (29.8 MB bundle, 865 crops)
 - [ ] Open in browser, iterate on the page
 - [ ] CTA contact link (needs user's choice)
-- [ ] GitHub repo + Pages deploy
+- [x] GitHub repo https://github.com/selim-amrouni/pole-pass (public, MIT) + Pages at https://selim-amrouni.github.io/pole-pass/ via deploy.sh
+- [x] 16 issues filed for known problems and deferred work
 - [ ] Stretch: Overpass diff vs OSM power=pole
 - [ ] Writeup with every number traced to data/
 
