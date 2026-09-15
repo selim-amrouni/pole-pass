@@ -16,5 +16,5 @@ touch "$tmp/.nojekyll"
 git -C "$tmp" add -A
 git -C "$tmp" -c user.name="$(git -C "$root" config user.name)" -c user.email="$(git -C "$root" config user.email)" \
   commit -q -m "deploy $slug $(date -u +%Y-%m-%dT%H:%MZ)"
-git -C "$tmp" push -q -f "$remote" gh-pages
+git -C "$tmp" -c http.postBuffer=524288000 push -f "$remote" gh-pages
 echo "deployed $slug to gh-pages ($(du -sh "$tmp" | cut -f1))"
