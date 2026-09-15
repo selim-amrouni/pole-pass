@@ -56,8 +56,10 @@ def web_rows(poles, slug, out_dir):
         if p.get("best_crop") and (ROOT / p["best_crop"]).exists():
             dst = crops_dir / f"{p['pole_id']}.jpg"
             src = ROOT / p["best_crop"]
-            if not dst.exists() or dst.stat().st_mtime < src.stat().st_mtime or dst.with_suffix(".src").read_text() != p["best_crop"] if dst.with_suffix(".src").exists() else True:
-                dst.with_suffix(".src").write_text(p["best_crop"])
+            stamp = dst.with_suffix(".src")  # which source crop this web crop came from
+            stale = not dst.exists() or not stamp.exists() or stamp.read_text() != p["best_crop"]
+            if stale:
+                stamp.write_text(p["best_crop"])
                 with Image.open(src) as im:
                     im = im.convert("RGB")
                     im.thumbnail((WEB_CROP, WEB_CROP))
