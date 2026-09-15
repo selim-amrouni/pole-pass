@@ -1,0 +1,9 @@
+[project]
+name = "pole-pass"
+version = "0.1.0"
+description = "Pole condition and joint-use pass from open street imagery"
+requires-python = ">=3.12"
+dependencies = [
+    "pillow>=11",
+    "anthropic>=1",
+]
