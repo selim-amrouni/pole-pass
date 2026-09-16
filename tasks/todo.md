@@ -108,4 +108,5 @@ Chester MA 225; Lake Placid 117; Tupper Lake 119. Hardwick picked; newest photos
 - 444 utility poles photographed in 3+ distinct years (VTrans highway videolog, 2013 to 2022, every two years).
 - Tilt calibration, flat photos: none median 1.9 / p90 5.2 (n=2,182); slight 3.8; moderate 7.1; severe 31.3 (n=42). Cleaner than Greenpoint (highway camera, no panos).
 - Vegetation "touching" in the woods means canopy overlap in the photo; copy now says so.
+- Severe lean: 3 records; hard-00011 is a push brace (issue #22). The other two need a look.
 - Total API spend for Hardwick: $11.71.
