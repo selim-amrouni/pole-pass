@@ -25,7 +25,7 @@
   const dateLabel = d => d && d.date ? d.date : 'Date unknown';
 
   // ---------- state ----------
-  const state = { flag: 'all', yearMin: null, yearMax: null, recent: null, other: false, sort: 'date_desc', page: 1, selected: null, viewing: null, compare: false, colorMode: 'condition', tab: 'list', example: false, outline: true, markers: true, badges: true };
+  const state = { flag: 'all', yearMin: null, yearMax: null, recent: null, other: false, years: false, sort: 'date_desc', page: 1, selected: null, viewing: null, compare: false, colorMode: 'condition', tab: 'list', example: false, outline: true, markers: true, badges: true };
   const PAGE = 20;
   const byId = Object.fromEntries(D.records.map(r => [r.id, r]));
   const yearsAll = D.records.filter(PP.isUtility).map(r => r.shown.year).filter(y => y != null);
@@ -69,8 +69,8 @@
     $('dates-label').textContent = lbl;
   }
   function resetFilters() {
-    Object.assign(state, { flag: 'all', yearMin: null, yearMax: null, recent: null, other: false, page: 1 });
-    $('year-min').value = Y0 ?? ''; $('year-max').value = Y1 ?? ''; $('recent').setAttribute('aria-pressed', 'false'); $('other').checked = false;
+    Object.assign(state, { flag: 'all', yearMin: null, yearMax: null, recent: null, other: false, years: false, page: 1 });
+    $('year-min').value = Y0 ?? ''; $('year-max').value = Y1 ?? ''; $('recent').setAttribute('aria-pressed', 'false'); $('other').checked = false; $('years').checked = false;
     readYearInputs(); refresh();
   }
 
@@ -102,7 +102,7 @@
   }
   function renderList() {
     const total = filtered.length, shown = Math.min(total, state.page * PAGE);
-    const active = state.flag !== 'all' || state.yearMin != null || state.yearMax != null || state.recent || state.other;
+    const active = state.flag !== 'all' || state.yearMin != null || state.yearMax != null || state.recent || state.other || state.years;
     $('count').innerHTML = `<span><span class="mono">${shown}</span> of <span class="mono">${total}</span> matching ${state.other ? 'objects' : 'poles'}</span>${active ? '<button id="reset2">Reset filters</button>' : ''}`;
     if (!total) { $('list').innerHTML = `<div class="empty">No poles match these filters. <button class="btn sm" id="reset3">Reset filters</button></div>`; return; }
     $('list').innerHTML = filtered.slice(0, shown).map(rowHtml).join('') + (shown < total ? `<div class="more"><button class="btn sm" id="more">Show more (${total - shown} left)</button></div>` : '');
@@ -182,7 +182,8 @@
         <button class="m" id="tg-markers" aria-pressed="${state.markers}" ${m ? '' : 'disabled'}><i></i>Markers</button>
         <button class="b" id="tg-badges" aria-pressed="${state.badges}" ${frameFlags.length ? '' : 'disabled'}><i></i>Badges</button></div>`;
     const mkList = m && state.markers && m.att.length ? `<span class="mk-list">${m.att.map((a, i) => `${i + 1} ${esc(a.l)}`).join(' · ')}</span>` : (m && state.markers ? `<span class="mk-list">Approximate model positions</span>` : '');
-    const strip = r.frames.length > 1 ? `<div class="strip"><span class="lbl">${r.frames.length} photos<br>${r.seq} drive${r.seq === 1 ? '' : 's'}</span>
+    const yrs = PP.frameYears(r);
+    const strip = r.frames.length > 1 ? `<div class="strip"><span class="lbl">${r.frames.length} photos<br>${yrs.length > 1 ? `${yrs[0]}–${yrs[yrs.length - 1]}` : `${r.seq} drive${r.seq === 1 ? '' : 's'}`}</span>
         <div class="thumbs">${r.frames.map((x, i) => `<button data-i="${i}" aria-pressed="${i === state.viewing}" aria-label="View photo from ${esc(dateLabel(x))}">${x.img ? `<img src="${esc(x.img)}" alt="">` : `<span class="ph"></span>`}<span class="c">${esc(x.date || '?')}</span></button>`).join('')}</div>
         <button class="btn sm cmp" id="cmp" aria-pressed="${state.compare}">Compare</button></div>${state.compare ? compareHtml(r) : ''}` : '';
     const latest = r.latest && r.latest.ts && (!f || r.latest.ts > (f.ts || 0)) ? `<a href="${esc(r.latest.url)}" target="_blank" rel="noopener">Latest available photo ${esc(dateLabel(r.latest))}${r.latest.classified ? '' : ' (not assessed)'} ↗</a>` : '';
@@ -214,6 +215,7 @@
         <div class="dtext">
           <div class="sec"><h3>Model flags · ${r.n} photo${r.n === 1 ? '' : 's'}</h3><div class="fl">${flagItems || `<div class="it"><span class="flag dim">${PP.conditionUnclear(r) ? 'Cannot tell from photos' : 'No model flag'}</span></div>`}${rest}</div>
             <p class="hint">${r.n > 1 ? 'Filled dot: a photo agreeing with the combined value. ' : ''}${f ? `This photo: ${frameObs(f).map(esc).join(' · ')}.` : ''}</p></div>
+          ${util ? tiltHtml(r) : ''}
           ${util && flags.length ? `<div class="sec review"><h3>Your review · saved in this browser</h3>
             ${flags.map(k => `<div class="it"><span>${esc(L.flag[k])}</span><span class="seg" role="group" aria-label="Does the photo support ${esc(L.flag[k])}?">${['supported', 'not_supported', 'cannot_tell'].map(v => `<button class="${v === 'supported' ? 'yes' : ''}" data-rf="${k}" data-rv="${v}" aria-pressed="${rv.flags[k] === v}" title="${L.reviewLong[v]}">${L.review[v]}</button>`).join('')}</span></div>`).join('')}
             <textarea id="rnote" maxlength="500" placeholder="Note (optional)" aria-label="Review note">${esc(rv.note || '')}</textarea>
@@ -222,8 +224,8 @@
             <div class="kv">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)} <span>· ${r.nfeat} detection${r.nfeat === 1 ? '' : 's'} · estimate</span> · <button class="btn sm" id="fullmap">Full map</button></div></div>
           <div class="links">${latest}<details class="tech"><summary>Technical details</summary>
             <p class="small muted">Raw model output per photo. Self-rating is uncalibrated. Notes are free text and may overstate.</p>
-            <table><thead><tr><th>Photo</th><th>Pole px</th><th>Type</th><th>Lean</th><th>Crossarm</th><th>Veg.</th><th>Xfmr</th><th>Att.</th><th>Self-rating</th><th>Note</th></tr></thead>
-            <tbody>${r.frames.map(x => `<tr><td class="mono">${esc(x.date || '?')}${x.pano ? ' 360°' : ''}</td><td class="mono">${x.px ?? ''}</td><td>${esc(x.type)}</td><td>${esc(x.lean)}</td><td>${esc(x.xarm)}</td><td>${esc(x.veg)}</td><td>${x.xfmr ? 'yes' : 'no'}</td><td class="mono">${x.att ?? ''}</td><td class="mono">${x.conf ?? ''}</td><td>${esc(x.note)}</td></tr>`).join('')}</tbody></table>
+            <table><thead><tr><th>Photo</th><th>Pole px</th><th>Type</th><th>Lean</th><th>Tilt</th><th>Crossarm</th><th>Veg.</th><th>Xfmr</th><th>Att.</th><th>Self-rating</th><th>Note</th></tr></thead>
+            <tbody>${r.frames.map(x => `<tr><td class="mono">${esc(x.date || '?')}${x.pano ? ' 360°' : ''}</td><td class="mono">${x.px ?? ''}</td><td>${esc(x.type)}</td><td>${esc(x.lean)}</td><td class="mono">${Number.isFinite(x.tilt) ? `${x.tilt}°` : ''}</td><td>${esc(x.xarm)}</td><td>${esc(x.veg)}</td><td>${x.xfmr ? 'yes' : 'no'}</td><td class="mono">${x.att ?? ''}</td><td class="mono">${x.conf ?? ''}</td><td>${esc(x.note)}</td></tr>`).join('')}</tbody></table>
             <p class="small muted">Mapillary features: <span class="mono">${r.features.map(esc).join(', ')}</span> · grouped within ${esc(D.meta.method.radius_m)} m · demo id, not an asset id.</p></details></div>
         </div>
       </div>`;
@@ -231,8 +233,37 @@
     updateDetailNav();
     if (mapApi) mapApi.toMini();
   }
+  // Apparent tilt per photo (from the Mapillary outline) against photo date. A property of each photo, not a measured lean.
+  function tiltHtml(r) {
+    const pts = r.frames.map((x, i) => ({ i, ts: x.ts, t: Math.abs(x.tilt), lean: x.lean })).filter(p => Number.isFinite(p.t) && p.ts);
+    if (!pts.length) return '';
+    const cal = D.meta.tilt;
+    const noise = cal ? `Photos the model called straight read up to ${cal.none_p90}° (90th percentile, ${cal.none_n} photos).` : '';
+    const hint = `<p class="hint">Angle of the Mapillary outline from vertical in each photo. Camera roll and perspective add noise. ${noise} Not a measured lean.</p>`;
+    if (pts.length === 1) return `<div class="sec tilt"><h3>Apparent tilt in photo</h3><div class="it"><span><b class="mono">${pts[0].t.toFixed(1)}°</b> from vertical, photo from ${esc(dateLabel(r.frames[pts[0].i]))}</span></div>${hint}</div>`;
+    const W = 360, H = 120, L = 30, R = 10, T = 10, B = 24;
+    const ts0 = Math.min(...pts.map(p => p.ts)), ts1 = Math.max(...pts.map(p => p.ts));
+    const ymax = Math.max(15, Math.ceil(Math.max(...pts.map(p => p.t)) / 5) * 5 + 5);
+    const X = ts => ts1 === ts0 ? L + (W - L - R) / 2 : L + (ts - ts0) / (ts1 - ts0) * (W - L - R);
+    const Y = t => T + (1 - t / ymax) * (H - T - B);
+    const y0 = new Date(ts0).getUTCFullYear(), y1 = new Date(ts1).getUTCFullYear();
+    const years = []; for (let y = y0; y <= y1; y++) years.push(y);
+    const step = years.length > 6 ? Math.ceil(years.length / 6) : 1;
+    const first = r.frames[pts.reduce((a, p) => p.ts < a.ts ? p : a).i], last = r.frames[pts.reduce((a, p) => p.ts > a.ts ? p : a).i];
+    const xt = y0 === y1  // one calendar year: label the first and last photo month instead
+      ? `<text x="${X(ts0).toFixed(1)}" y="${H - 6}" text-anchor="start">${esc(dateLabel(first))}</text>${ts1 > ts0 && last.date !== first.date ? `<text x="${X(ts1).toFixed(1)}" y="${H - 6}" text-anchor="end">${esc(dateLabel(last))}</text>` : ''}`
+      : years.filter((y, k) => k % step === 0 || y === y1).map(y => { const ts = Math.min(ts1, Math.max(ts0, Date.UTC(y, 0, 1))); return `<text x="${X(ts).toFixed(1)}" y="${H - 6}" text-anchor="${y === y0 ? 'start' : y === y1 ? 'end' : 'middle'}">${y}</text>`; }).join('');
+    const yt = [0, 10, 20, 30].filter(v => v <= ymax).map(v => `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 4}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end">${v}°</text>`).join('');
+    const band = cal ? `<rect class="band" x="${L}" y="${Y(cal.none_p90).toFixed(1)}" width="${W - L - R}" height="${(Y(0) - Y(cal.none_p90)).toFixed(1)}"/>` : '';
+    const dots = pts.sort((a, b) => a.ts - b.ts).map(p => `<circle class="pt ${p.lean === 'moderate' || p.lean === 'severe' ? 'issue' : p.lean === 'slight' ? 'warn' : ''}${p.i === state.viewing ? ' cur' : ''}" data-i="${p.i}" cx="${X(p.ts).toFixed(1)}" cy="${Y(p.t).toFixed(1)}" r="5"><title>${esc(dateLabel(r.frames[p.i]))}: ${p.t.toFixed(1)}° in photo</title></circle>`).join('');
+    return `<div class="sec tilt"><h3>Apparent tilt in photos · ${pts.length} of ${r.n}</h3>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Apparent tilt per photo over time">${band}${yt}${xt}${dots}</svg>
+      <p class="hint">${cal ? `Shaded: range of photos the model called straight. ` : ''}Dot color follows that photo's lean call. Click a dot to view the photo.</p>${hint}</div>`;
+  }
   function compareHtml(r) {
-    const a = r.frames[state.viewing], b = r.frames.find((x, i) => i !== state.viewing && x.img) || null;
+    // pair with the photo farthest in time that has an image: earliest against latest for records photographed across years
+    const a = r.frames[state.viewing];
+    const b = r.frames.reduce((best, x, i) => i !== state.viewing && x.img && (!best || Math.abs((x.ts || 0) - (a.ts || 0)) > Math.abs((best.ts || 0) - (a.ts || 0))) ? x : best, null);
     if (!a || !b || !a.img) return `<p class="hint" style="padding:0 12px 8px">Only one photo has an in-app image; others are available through their source links.</p>`;
     const fig = x => `<figure><img src="${esc(x.img)}" alt="Photo taken ${esc(dateLabel(x))}"><figcaption><b>${esc(dateLabel(x))}</b> · ${esc(frameObs(x)[0])}, ${esc(frameObs(x)[4])}</figcaption></figure>`;
     return `<div class="compare">${fig(a)}${fig(b)}</div><p class="hint" style="padding:0 12px 8px;margin:0">Two photos of the same record. Differences are not confirmed changes; angle, distance, and camera differ.</p>`;
@@ -321,6 +352,8 @@
     $('sort').addEventListener('change', e => { state.sort = e.target.value; refresh(); });
     $('reset').addEventListener('click', () => { resetFilters(); toggleMenu('dates-btn', 'dates-menu', false); });
     $('other').addEventListener('change', e => { state.other = e.target.checked; state.flag = 'all'; refresh(); if (mapApi) mapApi.recolor(); });
+    $('years').addEventListener('change', e => { state.years = e.target.checked; refresh(); });
+    $('years-n').textContent = PP.summary(D.records).spansYears;
     $('dates-btn').addEventListener('click', () => { toggleMenu('dates-btn', 'dates-menu'); toggleMenu('export-btn', 'export-menu', false); });
     $('export-btn').addEventListener('click', () => { toggleMenu('export-btn', 'export-menu'); toggleMenu('dates-btn', 'dates-menu', false); });
     document.addEventListener('click', e => { if (!e.target.closest('.menu')) { toggleMenu('export-btn', 'export-menu', false); toggleMenu('dates-btn', 'dates-menu', false); } });
@@ -335,6 +368,7 @@
       if (e.key === 'ArrowDown' && rows[i + 1]) { e.preventDefault(); rows[i + 1].focus(); } if (e.key === 'ArrowUp' && rows[i - 1]) { e.preventDefault(); rows[i - 1].focus(); }
     });
     $('detail').addEventListener('click', e => {
+      const pt = e.target.closest && e.target.closest('.tilt .pt'); if (pt) { state.viewing = +pt.dataset.i; state.compare = false; renderDetail(); return; }
       const t = e.target.closest('button, a#enlarge'); if (!t) return;
       if (t.id === 'back' || t.id === 'close') { close(); return; }
       if (t.id === 'fullmap') { close(true); return; }

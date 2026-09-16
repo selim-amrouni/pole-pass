@@ -117,7 +117,7 @@ def build_records(poles, out_dir, polygons, marks):
             frames.append({"poly": pg.get("poly"), "size": pg.get("size"), "marks": mk,"id": f["image_id"], "date": ms_date(f.get("captured_at")), "ts": f.get("captured_at"), "year": ms_year(f.get("captured_at")),
                            "url": f["url"], "px": f.get("px_h"), "pano": bool(f.get("is_pano")), "seq": f.get("sequence"), "img": img, "by": f.get("creator"),
                            "type": f["pole_type"], "lean": f["lean"], "xarm": f["crossarm"], "veg": f["vegetation"], "xfmr": bool(f["transformer"]),
-                           "att": f["attachments"], "conf": f.get("confidence"), "note": f.get("note") or "", "shown": bool(f.get("shown"))})
+                           "att": f["attachments"], "conf": f.get("confidence"), "note": f.get("note") or "", "tilt": f.get("tilt"), "shown": bool(f.get("shown"))})
         rows.append({
             "id": p["pole_id"], "lon": p["lon"], "lat": p["lat"], "util": bool(p["is_utility_pole"]), "type": p["pole_type"], "material": p["material"],
             "lean": p["lean_severity"], "xarm": p["crossarm_condition"], "veg": p["vegetation_contact"], "xfmr": bool(p["transformer_present"]),
@@ -176,7 +176,7 @@ def validation_blocks(precision):
     return notice, section, f"{precision['graded_poles']} records reviewed by hand"
 
 
-def tech_details(summary, coverage, method):
+def tech_details(summary, coverage, method, tilt_meta=None):
     return f"""
 <ul>
 <li>Coverage: Mapillary vector tiles at zoom 14 for the bounding box {', '.join(f'{v:.4f}' for v in coverage['bbox'])}: {coverage['images']:,} images and {coverage['map_features']:,} map features, of which {coverage['pole_like_features']:,} are pole-like classes. Captures span {coverage['capture_first']} to {coverage['capture_last']} for the whole image pool; the dates shown on records are the dates of the photos actually assessed.</li>
@@ -187,6 +187,7 @@ def tech_details(summary, coverage, method):
 <li>Records: photos of one feature are combined, then features within {method['radius_m']} m are grouped by single linkage into one record ({summary['records_merged_from_multiple_features']} of {summary['records']} records combine more than one feature). Each field takes the most common value across assessed photos, ties going to the more cautious value; exact vote counts are kept. Photos from one drive are correlated, so agreement across them is not independent verification. {summary['single_frame_records']} records rest on a single photo.</li>
 <li>Photo shown: the newest assessed photo where the pole is at least {method['readable_px']} px tall, otherwise the largest. The record's fields combine all assessed photos, which can include older ones than the photo shown. The latest available photo, assessed or not, is listed separately.</li>
 <li>Positions on photos: a second model pass (same model, one request per assessed photo) was given the crop with a faint labeled grid and the earlier assessment, and asked for the position of the pole top and base, each counted attachment, the transformer, crossarm damage, and vegetation contact. These are approximate model estimates of where something appears in the photo, shown as markers you can hide. They are not measurements and were not verified.</li>
+<li>Apparent tilt: for each assessed photo, the angle of Mapillary's pole outline from the image vertical (medial axis of the outline, 12 scanlines, least squares). It is a property of the photo, not a measurement of the pole: camera roll, perspective, and a lean toward or away from the camera all distort it.{f" Photos the model called straight read a median of {tilt_meta['none_median']}° and up to {tilt_meta['none_p90']}° at the 90th percentile ({tilt_meta['none_n']:,} photos)." if tilt_meta else ""}</li>
 <li>Possible condition issue: lean moderate or severe, or crossarm damaged, or vegetation touching. Watch item: slight lean, one tier below an issue; it is common ({summary.get('utility_with_warning_flag', 'many')} of {summary['utility_records']} utility poles) and often within the noise of camera angle. Transformers and attachment counts are not condition issues. Attachment count is the number of visible non-electric items the model counted on the pole; it does not identify owners, tenants, or billing status. Coordinates are averaged detection positions, not surveyed.</li>
 </ul>"""
 
@@ -216,6 +217,13 @@ def main():
     coverage = json.loads((DATA / "coverage" / slug / "summary.json").read_text())
     vpath = DATA / "validate" / slug / "precision.json"
     precision = json.loads(vpath.read_text()) if vpath.exists() else None
+    tpath = DATA / "tilt" / slug / "calibration.json"
+    tilt_meta = None
+    if tpath.exists():  # noise floor of the outline tilt, measured against the model's own "none" calls (tilt.py --calibrate)
+        cal = json.loads(tpath.read_text())
+        none = (cal.get("by_model_lean_call") or {}).get("none", {}).get("all")
+        if none:
+            tilt_meta = {"none_median": none["median"], "none_p90": none["p90"], "none_n": none["n"], "source": str(tpath.relative_to(ROOT))}
     out_dir = OUT / slug
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -232,7 +240,7 @@ def main():
     generated = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
     meta = {"slug": slug, "location": "Greenpoint, Brooklyn" if slug.startswith("greenpoint") else args.town, "version": version, "generated": generated,
             "contact": args.contact or None, "example_id": example, "bbox": [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
-            "center": [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], "method": method, "attribution": ATTRIBUTION,
+            "center": [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], "method": method, "attribution": ATTRIBUTION, "tilt": tilt_meta,
             "counts": {"records": len(rows), "utility": sum(r["util"] for r in rows), "frames_classified": summary["frames_classified"]}}
     (out_dir / "data.js").write_text("window.POLE_DATA=" + json.dumps({"meta": meta, "records": rows}, separators=(",", ":")) + ";")
     write_all_exports(rows, out_dir)
@@ -245,7 +253,7 @@ def main():
                        f"<p><a class=\"btn primary\" href=\"{args.contact}\">Contact Selim</a></p>") if args.contact else ""
     html = render((WEB / "index.html").read_text(), {
         "LOCATION": meta["location"], "GENERATED": generated, "VERSION": version, "VALIDATION_NOTICE": notice, "VALIDATION_SHORT": vshort,
-        "VALIDATION_SECTION": vsection, "TECH_DETAILS": tech_details(summary, coverage, method),
+        "VALIDATION_SECTION": vsection, "TECH_DETAILS": tech_details(summary, coverage, method, tilt_meta),
         "CONTACT_NAV": contact_nav, "CONTACT_SECTION": contact_section, "ATTRIBUTION": ATTRIBUTION,
         "BUILD": hashlib.sha1(b"".join((WEB / f).read_bytes() for f in ("style.css", "app.js", "predicates.js")) + version.encode()).hexdigest()[:8],
     })

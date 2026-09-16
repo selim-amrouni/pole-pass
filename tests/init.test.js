@@ -7,7 +7,7 @@ const path = require('path');
 const { makeDocument } = require('./fakedom.js');
 
 const OUT = path.join(__dirname, '..', 'out', 'greenpoint-brooklyn-new-york');
-const IDS = ['summary', 'dates-label|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|button', 'other|input', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img'];
+const IDS = ['summary', 'dates-label|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|button', 'other|input', 'years|input', 'years-n|span', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img'];
 
 function boot(hash = '', width = 1440) {
   const document = makeDocument(IDS.map(s => s.split('|')));
@@ -81,4 +81,23 @@ test('prev/next move within the filtered list and single-photo records say so', 
   const single = window.POLE_DATA.records.find(r => r.util && r.n === 1);
   PP.select(single.id);
   assert.match(document.getElementById('detail').innerHTML, /Single photo/);
+});
+
+test('multi-year filter keeps records photographed in 2+ years; compare pairs the farthest photos in time', () => {
+  const { document, PP, window } = boot();
+  const n = window.POLE_DATA.records.filter(r => r.util && new Set(r.frames.map(f => f.year).filter(y => y != null)).size >= 2).length;
+  const cb = document.getElementById('years'); cb.checked = true; cb.dispatch('change');
+  assert.equal(PP.filtered.length, n);
+  assert.equal(document.getElementById('years-n').textContent, String(n));
+  if (!n) return;
+  PP.select(PP.filtered[0].id);
+  const detail = document.getElementById('detail');
+  assert.match(detail.innerHTML, /Apparent tilt in photos/);
+  assert.match(detail.innerHTML, /\d{4}–\d{4}<\/span>/, 'strip label shows the year span');
+  detail.querySelectorAll('button').find(b => b.id === 'cmp').click();
+  const caps = [...detail.innerHTML.matchAll(/<figcaption><b>(\d{4})-\d{2}<\/b>/g)].map(m => m[1]);
+  assert.equal(caps.length, 2);
+  assert.notEqual(caps[0], caps[1], 'the two compared photos come from different years');
+  document.getElementById('reset').click();
+  assert.equal(cb.checked, false); assert.ok(PP.filtered.length > n);
 });

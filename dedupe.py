@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from coverage import DATA, ROOT, slugify
+from tilt import apparent_tilt
 
 VOTE_FIELDS = ["pole_present", "pole_type", "material", "lean_severity", "crossarm_condition",
                "transformer_present", "vegetation_contact", "attachment_count"]
@@ -154,6 +155,7 @@ def main():
             "crossarm": r["classification"]["crossarm_condition"], "vegetation": r["classification"]["vegetation_contact"],
             "transformer": r["classification"]["transformer_present"], "attachments": r["classification"]["attachment_count"],
             "confidence": r["classification"]["confidence"], "note": r["classification"].get("notes") or "",
+            "tilt": apparent_tilt(r.get("polygon_norm"), r.get("width"), r.get("height")),
             "shown": r is best,
         } for r in rs), key=lambda f: f["captured_at"] or 0)
         is_utility = bool(fields["pole_present"]) and fields["pole_type"] in UTILITY_TYPES

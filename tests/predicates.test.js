@@ -27,6 +27,14 @@ test('slight lean is a watch item, one tier below a condition issue', () => {
   assert.deepEqual(sorted, ['i', 'w', 'n'], 'issues first, then watch items');
 });
 
+test('spansYears needs two distinct photo years; the filter keeps only those records', () => {
+  const two = rec({ id: 'two', frames: [{ year: 2019 }, { year: 2019 }, { year: 2024 }] }), one = rec({ id: 'one', frames: [{ year: 2024 }, { year: null }] });
+  assert.deepEqual(PP.frameYears(two), [2019, 2024]);
+  assert.equal(PP.spansYears(two), true); assert.equal(PP.spansYears(one), false); assert.equal(PP.spansYears(rec({})), false);
+  assert.deepEqual(PP.applyFilters([two, one], { flag: 'all', years: true }).map(r => r.id), ['two']);
+  assert.equal(PP.summary([two, one, rec({ util: false, frames: [{ year: 1 }, { year: 2 }] })]).spansYears, 1);
+});
+
 test('3+ attachments requires a utility pole and an integer count', () => {
   assert.equal(PP.attachments3(rec({ att: 3 })), true);
   assert.equal(PP.attachments3(rec({ att: 2 })), false);
