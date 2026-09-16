@@ -182,6 +182,17 @@
         <button class="o" id="tg-outline" aria-pressed="${state.outline}" ${f && f.poly ? '' : 'disabled'}><i></i>Outline</button>
         <button class="m" id="tg-markers" aria-pressed="${state.markers}" ${m ? '' : 'disabled'}><i></i>Markers</button>
         <button class="b" id="tg-badges" aria-pressed="${state.badges}" ${frameFlags.length ? '' : 'disabled'}><i></i>Badges</button></div>`;
+    // key for the overlay glyphs, only the ones drawn on this photo; sits bottom-left, opposite the toggles
+    const G = { outline: '<rect x="4.5" y="1" width="5" height="12" rx="1"/>', axis: '<line x1="7" y1="1" x2="7" y2="13"/>', att: '<circle cx="7" cy="7" r="5.5"/>', xfmr: '<rect x="2" y="2" width="10" height="10"/>', xarm: '<polygon points="7,1.5 12.5,12 1.5,12"/>', veg: '<polygon points="7,1 13,7 7,13 1,7"/>' };
+    const keyItems = [
+      f && f.poly && state.outline && ['outline', 'Mapillary outline'],
+      m && state.markers && m.top && m.base && ['axis', 'Pole axis, model estimate'],
+      m && state.markers && m.att.length && ['att', `Attachment 1${m.att.length > 1 ? `–${m.att.length}` : ''}`],
+      m && state.markers && m.xfmr && ['xfmr', 'Transformer'],
+      m && state.markers && m.xarm && ['xarm', 'Crossarm damage'],
+      m && state.markers && m.veg && ['veg', 'Vegetation contact'],
+    ].filter(Boolean);
+    const key = keyItems.length ? `<div class="key" aria-label="Photo annotation key">${keyItems.map(([k, label]) => `<span><svg viewBox="0 0 14 14" class="g ${k}" aria-hidden="true">${G[k]}</svg>${esc(label)}</span>`).join('')}</div>` : '';
     const mkList = m && state.markers && m.att.length ? `<span class="mk-list">${m.att.map((a, i) => `${i + 1} ${esc(a.l)}`).join(' · ')}</span>` : (m && state.markers ? `<span class="mk-list">Approximate model positions</span>` : '');
     const yrs = PP.frameYears(r);
     const strip = r.frames.length > 1 ? `<div class="strip"><span class="lbl">${r.frames.length} photos<br>${yrs.length > 1 ? `${yrs[0]}–${yrs[yrs.length - 1]}` : `${r.seq} drive${r.seq === 1 ? '' : 's'}`}</span>
@@ -208,7 +219,7 @@
       ${state.example ? `<div class="example-tag">Example record. Pick any pole from the list or map.</div>` : ''}
       <div class="dbody">
         <div class="dphoto">
-          <div class="stage">${photo}${f && f.img ? ovbar : ''}</div>
+          <div class="stage">${photo}${f && f.img ? ovbar + key : ''}</div>
           <div class="cap"><span><b>${esc(dateLabel(f))}</b>${f && f.pano ? ' · 360°' : ''}${f && f.shown ? (r.shown.newest ? ' · newest readable' : ' · clearest available') : ''}</span>
             ${f && f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">Source ↗</a>` : ''}${f && f.img ? `<a href="#" id="enlarge">Enlarge</a>` : ''}${f && f.by ? `<span class="muted small">by ${esc(f.by)}</span>` : ''}${mkList}</div>
           ${strip}

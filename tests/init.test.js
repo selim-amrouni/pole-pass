@@ -101,3 +101,16 @@ test('multi-year filter keeps records photographed in 2+ years; compare pairs th
   document.getElementById('reset').click();
   assert.equal(cb.checked, false); assert.ok(PP.filtered.length > n);
 });
+
+test('photo key lists only the glyphs drawn on the current frame and follows the toggles', () => {
+  const { document, PP, window } = boot();
+  const r = window.POLE_DATA.records.find(x => x.util && x.frames.some(f => f.img && f.marks && f.marks.top && f.marks.base && f.marks.att.length));
+  PP.select(r.id);
+  const detail = document.getElementById('detail');
+  assert.match(detail.innerHTML, /class="key"[^]*Mapillary outline[^]*Pole axis[^]*Attachment 1/);
+  detail.querySelectorAll('button').find(b => b.id === 'tg-markers').click();
+  assert.doesNotMatch(detail.innerHTML, /Pole axis/);
+  assert.match(detail.innerHTML, /Mapillary outline/);
+  detail.querySelectorAll('button').find(b => b.id === 'tg-outline').click();
+  assert.doesNotMatch(detail.innerHTML, /class="key"/);
+});
