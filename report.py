@@ -160,7 +160,7 @@ def validation_blocks(precision):
     notice = "Experimental results. The model's assessments have not been independently verified."
     section = "<p>No completed validation results are published for this demo.</p>"
     if not precision or not precision.get("flags") or not precision.get("graded_poles"):
-        return notice, section
+        return notice, section, "Experimental · not verified"
     labels = {"utility_pole": "Is a utility pole", "lean_moderate_or_worse": "Possible lean (moderate or severe)", "lean_severe": "Possible lean (severe)",
               "crossarm_damaged": "Possible crossarm damage", "vegetation_touching": "Possible vegetation contact", "transformer_present": "Transformer visible",
               "attachments_3plus": "3+ estimated attachments", "attachment_count_within_1": "Attachment estimate within 1"}
@@ -172,7 +172,7 @@ def validation_blocks(precision):
                f"Precision is the share of model flags the reviewer agreed with. Missed flags were not measured at scale.</p>"
                f"<table><thead><tr><th>Flag</th><th>Reviewed</th><th>Agreed</th><th>Precision</th></tr></thead><tbody>{''.join(trs)}</tbody></table>")
     notice = f"Reviewed sample: {precision['graded_poles']} records checked by hand. See <a href=\"#about\">Validation</a>."
-    return notice, section
+    return notice, section, f"{precision['graded_poles']} records reviewed by hand"
 
 
 def tech_details(summary, coverage, method):
@@ -238,12 +238,12 @@ def main():
     for f in ("style.css", "app.js", "predicates.js"):
         shutil.copy(WEB / f, out_dir / f)
 
-    notice, vsection = validation_blocks(precision)
+    notice, vsection, vshort = validation_blocks(precision)
     contact_nav = f'<a class="btn primary big" href="{args.contact}">Contact Selim</a>' if args.contact else ""
     contact_section = ("<h2>Try another area</h2><p>Send me an area you know. I'll check the available imagery and see whether a similar review would be useful.</p>"
                        f"<p><a class=\"btn primary\" href=\"{args.contact}\">Contact Selim</a></p>") if args.contact else ""
     html = render((WEB / "index.html").read_text(), {
-        "LOCATION": meta["location"], "GENERATED": generated, "VERSION": version, "VALIDATION_NOTICE": notice,
+        "LOCATION": meta["location"], "GENERATED": generated, "VERSION": version, "VALIDATION_NOTICE": notice, "VALIDATION_SHORT": vshort,
         "VALIDATION_SECTION": vsection, "TECH_DETAILS": tech_details(summary, coverage, method),
         "CONTACT_NAV": contact_nav, "CONTACT_SECTION": contact_section, "ATTRIBUTION": ATTRIBUTION,
         "BUILD": hashlib.sha1(b"".join((WEB / f).read_bytes() for f in ("style.css", "app.js", "predicates.js")) + version.encode()).hexdigest()[:8],

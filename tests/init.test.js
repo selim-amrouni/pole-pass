@@ -7,7 +7,7 @@ const path = require('path');
 const { makeDocument } = require('./fakedom.js');
 
 const OUT = path.join(__dirname, '..', 'out', 'greenpoint-brooklyn-new-york');
-const IDS = ['summary', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'year-min|input', 'year-max|input', 'recent|button', 'sort|select', 'reset|button', 'other|input', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'ws', 'count', 'list', 'map', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img'];
+const IDS = ['summary', 'dates-label|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|button', 'other|input', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img'];
 
 function boot(hash = '', width = 1440) {
   const document = makeDocument(IDS.map(s => s.split('|')));
@@ -31,7 +31,7 @@ test('initializes without maplibregl: fallback shown, list and count rendered, e
   assert.equal(document.getElementById('list').querySelectorAll('.row').length, Math.min(20, util));
   assert.equal(PP.state.selected, window.POLE_DATA.meta.example_id);
   assert.match(document.getElementById('detail').innerHTML, /Example record/);
-  assert.match(document.getElementById('detail').innerHTML, /Photo taken/);
+  assert.match(document.getElementById('detail').innerHTML, /Model flags/);
 });
 
 test('filters change list, count, and filtered export together', () => {

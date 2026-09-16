@@ -1,5 +1,6 @@
-/* Pole Pass front end. Runs without the map: data, list, filters, details, and exports
-   initialize first; the map is attempted afterwards and falls back to a message. */
+/* Pole Pass front end. Data, list, filters, details, and exports initialize first; the map is
+   attempted afterwards and falls back to a message. One map instance moves between the main
+   map area and the mini slot inside an open record. */
 (function () {
   'use strict';
   const D = window.POLE_DATA;
@@ -7,18 +8,20 @@
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  // ---------- labels (internal enums stay out of the UI) ----------
+  // ---------- labels ----------
   const L = {
     type: { wood_utility: 'Wood utility pole', concrete_or_steel_utility: 'Concrete or steel utility pole', street_light: 'Street light pole', traffic_signal: 'Traffic signal pole', other: 'Other object', unclear: 'Pole type unclear' },
-    lean: { none: 'No lean visible', slight: 'Slight lean', moderate: 'Possible lean (moderate)', severe: 'Possible lean (severe)', unclear: 'Cannot tell' },
-    xarm: { none_visible: 'No crossarm visible', intact: 'Crossarm looks intact', damaged: 'Possible crossarm damage', unclear: 'Cannot tell' },
-    veg: { none: 'No vegetation contact visible', near: 'Vegetation nearby', touching: 'Possible vegetation contact', unclear: 'Cannot tell' },
-    mat: { wood: 'Wood', concrete: 'Concrete', steel: 'Steel', fiberglass: 'Fiberglass', unclear: 'Cannot tell' },
+    lean: { none: 'No lean visible', slight: 'Slight lean', moderate: 'Possible lean (moderate)', severe: 'Possible lean (severe)', unclear: 'Lean: cannot tell' },
+    xarm: { none_visible: 'No crossarm visible', intact: 'Crossarm looks intact', damaged: 'Possible crossarm damage', unclear: 'Crossarm: cannot tell' },
+    veg: { none: 'No vegetation contact', near: 'Vegetation nearby', touching: 'Possible vegetation contact', unclear: 'Vegetation: cannot tell' },
+    mat: { wood: 'Wood', concrete: 'Concrete', steel: 'Steel', fiberglass: 'Fiberglass', unclear: 'Material: cannot tell' },
     flag: { lean: 'Possible lean', crossarm: 'Possible crossarm damage', vegetation: 'Possible vegetation contact', att3: '3+ estimated attachments', xfmr: 'Transformer visible' },
-    review: { supported: 'Flag supported', not_supported: 'Flag not supported', cannot_tell: 'Cannot tell from photos' },
+    review: { supported: 'Yes', not_supported: 'No', cannot_tell: "Can't tell" },
+    reviewLong: { supported: 'Flag supported', not_supported: 'Flag not supported', cannot_tell: 'Cannot tell from photos' },
   };
-  const attLabel = r => !PP.isUtility(r) ? 'Not assessed' : Number.isInteger(r.att) ? `${r.att} estimated attachment${r.att === 1 ? '' : 's'}` : 'Cannot tell';
-  const xfmrLabel = r => r.xfmr === true ? 'Transformer visible' : r.xfmr === false ? 'No transformer visible' : 'Cannot tell';
+  const attLabel = r => !PP.isUtility(r) ? 'Attachments not assessed' : Number.isInteger(r.att) ? `${r.att} estimated attachment${r.att === 1 ? '' : 's'}` : 'Attachments: cannot tell';
+  const attShort = r => !PP.isUtility(r) ? '' : Number.isInteger(r.att) ? `${r.att} attachment${r.att === 1 ? '' : 's'}` : 'attachments unclear';
+  const xfmrLabel = r => r.xfmr === true ? 'Transformer visible' : 'No transformer visible';
   const dateLabel = d => d && d.date ? d.date : 'Date unknown';
 
   // ---------- state ----------
@@ -30,75 +33,76 @@
   const THIS_YEAR = new Date(D.meta.generated).getUTCFullYear();
   let filtered = [], mapApi = null;
 
-  // ---------- review decisions, local to this browser, scoped to the dataset version ----------
+  // ---------- review decisions (local to this browser, scoped to the dataset version) ----------
   const RKEY = `polepass-review:${D.meta.slug}:${D.meta.version}`;
   function loadReview() { try { return JSON.parse(localStorage.getItem(RKEY) || '{}'); } catch (e) { return {}; } }
   function saveReview(obj) { try { localStorage.setItem(RKEY, JSON.stringify(obj)); } catch (e) { /* storage unavailable */ } }
   let review = loadReview();
-  const reviewStatus = r => {
-    const v = review[r.id]; if (!v || !v.flags) return null;
-    const vals = Object.values(v.flags).filter(Boolean); if (!vals.length) return null;
-    if (vals.every(x => x === 'supported')) return 'ok'; if (vals.some(x => x === 'not_supported')) return 'no'; return 'ct';
-  };
+  const reviewStatus = r => { const v = review[r.id]; if (!v || !v.flags) return null; const vals = Object.values(v.flags).filter(Boolean); if (!vals.length) return null; if (vals.every(x => x === 'supported')) return 'ok'; if (vals.some(x => x === 'not_supported')) return 'no'; return 'ct'; };
   const reviewStatusLabel = r => ({ ok: 'Flag supported', no: 'Flag not supported', ct: 'Cannot tell from photos' }[reviewStatus(r)] || 'Not reviewed');
 
-  // ---------- summary ----------
+  // ---------- summary pills ----------
   function renderSummary() {
     const s = PP.summary(D.records);
-    const dates = s.yearMin == null ? 'Unknown' : s.yearMin === s.yearMax ? String(s.yearMin) : `${s.yearMin} to ${s.yearMax}`;
+    const dates = s.yearMin == null ? 'Unknown' : s.yearMin === s.yearMax ? String(s.yearMin) : `${s.yearMin}–${s.yearMax}`;
     $('summary').innerHTML = [
-      tile(s.utility, 'Poles identified', 'Model estimate'),
-      tile(`${s.conditionIssues} of ${s.utility}`, 'Possible condition issues', 'Possible lean, crossarm damage, or vegetation contact'),
-      tile(`${s.attachments3} of ${s.utility}`, '3+ estimated attachments', 'Visible non-electric attachments'),
-      tile(dates, 'Source photo dates', s.undated ? `Photos shown for the ${s.utility} poles. ${s.undated} without a date.` : `Photos shown for the ${s.utility} poles`),
+      `<span class="pill" title="Model estimate"><b>${s.utility}</b>poles identified</span>`,
+      `<span class="pill issue" title="Possible lean, crossarm damage, or vegetation contact"><b>${s.conditionIssues}</b>possible condition issues</span>`,
+      `<span class="pill att" title="Visible non-electric attachments"><b>${s.attachments3}</b>with 3+ attachments</span>`,
+      `<span class="pill" title="Dates of the photos shown for the ${s.utility} poles${s.undated ? `; ${s.undated} without a date` : ''}"><b>${esc(dates)}</b>photo dates</span>`,
     ].join('');
+    $('dates-label').textContent = dates;
   }
-  const tile = (v, l, q) => `<div class="tile"><div class="v">${esc(v)}</div><div class="l">${esc(l)}</div>${q ? `<div class="q">${esc(q)}</div>` : ''}</div>`;
 
   // ---------- filters ----------
-  const CHIPS = [['all', 'All poles', ''], ['lean', 'Possible lean', 'issue'], ['xarm', 'Possible crossarm damage', 'issue'], ['veg', 'Possible vegetation contact', 'issue'], ['att3', '3+ estimated attachments', ''], ['xfmr', 'Transformer visible', '']];
+  const CHIPS = [['all', 'All poles', ''], ['lean', 'Possible lean', 'issue'], ['xarm', 'Crossarm damage', 'issue'], ['veg', 'Vegetation contact', 'issue'], ['att3', '3+ attachments', ''], ['xfmr', 'Transformer', '']];
   function renderChips() {
     const base = D.records.filter(r => state.other ? !PP.isUtility(r) : PP.isUtility(r));
-    $('chips').innerHTML = CHIPS.map(([k, label, cls]) => {
-      const n = base.filter(PP.FILTERS[k]).length;
-      return `<button class="chip ${cls}" data-f="${k}" aria-pressed="${state.flag === k}">${esc(label)}<span class="n">${n}</span></button>`;
-    }).join('');
+    $('chips').innerHTML = CHIPS.map(([k, label, cls]) => `<button class="chip ${cls}" data-f="${k}" aria-pressed="${state.flag === k}">${esc(label)}<span class="n">${base.filter(PP.FILTERS[k]).length}</span></button>`).join('');
   }
   function readYearInputs() {
     const a = parseInt($('year-min').value, 10), b = parseInt($('year-max').value, 10);
     state.yearMin = Number.isFinite(a) && (Y0 == null || a > Y0) ? a : null;
     state.yearMax = Number.isFinite(b) && (Y1 == null || b < Y1) ? b : null;
+    const lbl = state.yearMin == null && state.yearMax == null && !state.recent ? `${Y0 ?? '?'}–${Y1 ?? '?'}` : `${state.recent ? `${state.recent}+` : `${state.yearMin ?? Y0}–${state.yearMax ?? Y1}`}`;
+    $('dates-label').textContent = lbl;
   }
   function resetFilters() {
     Object.assign(state, { flag: 'all', yearMin: null, yearMax: null, recent: null, other: false, page: 1 });
     $('year-min').value = Y0 ?? ''; $('year-max').value = Y1 ?? ''; $('recent').setAttribute('aria-pressed', 'false'); $('other').checked = false;
-    refresh();
+    readYearInputs(); refresh();
   }
 
   // ---------- list ----------
   function refresh(keepPage) {
     if (!keepPage) state.page = 1;
     filtered = PP.applyFilters(D.records, state).sort(PP.SORTS[state.sort]);
-    renderChips();
-    renderList();
+    renderChips(); renderList();
     if (mapApi) mapApi.setData(filtered);
     updateDetailNav();
   }
+  function flagChips(r, dim = true) {
+    const out = PP.conditionFlags(r).map(f => `<span class="flag issue">${L.flag[f]}</span>`);
+    if (PP.attachments3(r)) out.push(`<span class="flag att">3+ attachments</span>`);
+    if (PP.transformerVisible(r)) out.push(`<span class="flag">Transformer</span>`);
+    if (!out.length && dim) out.push(PP.conditionUnclear(r) ? `<span class="flag dim">Cannot tell</span>` : `<span class="flag dim">No model flag</span>`);
+    return out.join('');
+  }
   function rowHtml(r) {
-    const flags = PP.conditionFlags(r).map(f => `<span class="flag issue">${L.flag[f]}</span>`);
-    if (PP.attachments3(r)) flags.push(`<span class="flag att">3+ attachments</span>`);
-    if (PP.transformerVisible(r)) flags.push(`<span class="flag">Transformer</span>`);
-    if (!flags.length) flags.push(PP.conditionUnclear(r) ? `<span class="flag dim">Cannot tell</span>` : `<span class="flag dim">No model flag</span>`);
+    const util = PP.isUtility(r);
     const st = reviewStatus(r);
     const img = r.shown.img ? `<img src="${esc(r.shown.img)}" alt="" loading="lazy">` : `<span class="ph">No photo</span>`;
+    const l1 = util ? flagChips(r) : `<span class="flag dim">${esc(L.type[r.type] || 'Other object')}</span>`;
+    const right = util ? (st ? `<span class="status ${st}">${esc(reviewStatusLabel(r))}</span>` : `<span>${esc(attShort(r))}</span>`) : `<span class="status">Not a utility pole</span>`;
     return `<button class="row" role="option" data-id="${esc(r.id)}" aria-selected="${state.selected === r.id}">${img}
-      <span><span class="pid">${esc(r.id)}</span><span class="t">${PP.isUtility(r) ? esc(L.type[r.type] || r.type) : esc(L.type[r.type] || 'Other object')}</span><br><span class="s">${flags.join('')}</span></span>
-      <span class="r"><span class="d">${esc(dateLabel(r.shown))}</span><br>${esc(attLabel(r).replace(' estimated', ''))}<br><span class="status ${st || ''}">${esc(reviewStatusLabel(r))}</span></span></button>`;
+      <span><span class="l1"><span>${l1}</span><span class="d">${esc(dateLabel(r.shown))}</span></span>
+      <span class="l2"><span class="pid">${esc(r.id)}</span>${right}</span></span></button>`;
   }
   function renderList() {
     const total = filtered.length, shown = Math.min(total, state.page * PAGE);
-    $('count').innerHTML = `Showing <span class="mono">${shown}</span> of <span class="mono">${total}</span> matching ${state.other ? 'objects' : 'poles'}`;
-    if (!total) { $('list').innerHTML = `<div class="empty">No poles match these filters. <button class="btn sm" id="reset2">Reset filters</button></div>`; return; }
+    const active = state.flag !== 'all' || state.yearMin != null || state.yearMax != null || state.recent || state.other;
+    $('count').innerHTML = `<span><span class="mono">${shown}</span> of <span class="mono">${total}</span> matching ${state.other ? 'objects' : 'poles'}</span>${active ? '<button id="reset2">Reset filters</button>' : ''}`;
+    if (!total) { $('list').innerHTML = `<div class="empty">No poles match these filters. <button class="btn sm" id="reset3">Reset filters</button></div>`; return; }
     $('list').innerHTML = filtered.slice(0, shown).map(rowHtml).join('') + (shown < total ? `<div class="more"><button class="btn sm" id="more">Show more (${total - shown} left)</button></div>` : '');
   }
 
@@ -111,17 +115,16 @@
     document.querySelectorAll('.row').forEach(el => el.setAttribute('aria-selected', String(el.dataset.id === id)));
     renderDetail();
     $('ws').classList.add('has-detail');
-    if (mapApi) mapApi.select(r, opts.fromMap);
+    if (mapApi) { mapApi.toMini(); mapApi.select(r, opts.fromMap); }
     if (opts.focus !== false) { const h = $('detail').querySelector('.detail-h button'); if (h) h.focus(); }
     return true;
   }
-  function close() {
-    state.selected = null; state.example = false;
+  function close(keepSelection) {
+    if (!keepSelection) { state.selected = null; history.replaceState(null, '', location.pathname + location.search); document.querySelectorAll('.row').forEach(el => el.setAttribute('aria-selected', 'false')); }
+    state.example = false;
     $('ws').classList.remove('has-detail'); $('detail').hidden = true; $('detail').innerHTML = '';
-    history.replaceState(null, '', location.pathname + location.search);
-    document.querySelectorAll('.row').forEach(el => el.setAttribute('aria-selected', 'false'));
-    if (mapApi) mapApi.select(null);
-    const row = document.querySelector('.row'); if (row) row.focus();
+    if (mapApi) { mapApi.toMain(); if (!keepSelection) mapApi.select(null); }
+    const row = document.querySelector(keepSelection && state.selected ? `.row[data-id="${CSS.escape(state.selected)}"]` : '.row'); if (row) row.focus();
   }
   function step(delta) {
     const i = filtered.findIndex(r => r.id === state.selected); if (i < 0) return;
@@ -136,11 +139,12 @@
     p.disabled = i <= 0; n.disabled = i < 0 || i >= filtered.length - 1;
     const pos = $('pos'); if (pos) pos.textContent = i >= 0 ? `${i + 1} of ${filtered.length}` : 'Not in current list';
   }
-  function agreeText(r, key) {
+  function dots(r, key) {
     const v = r.votes[key]; if (!v) return '';
-    if (r.n === 1) return 'Single photo';
-    const win = Object.entries(v).sort((a, b) => b[1] - a[1])[0];
-    return `${win[1]} of ${r.n} photos`;
+    if (r.n === 1) return `<span class="dots"><i></i><span class="t">Single photo</span></span>`;
+    const win = Math.max(...Object.values(v)), n = r.n;
+    if (n <= 8) return `<span class="dots" title="${win} of ${n} photos agree">${'<i></i>'.repeat(win)}${'<i class="o"></i>'.repeat(n - win)}</span>`;
+    return `<span class="dots" title="${win} of ${n} photos agree"><span class="t">${win} of ${n}</span></span>`;
   }
   function frameObs(f) {
     return [L.lean[f.lean] || f.lean, L.xarm[f.xarm] || f.xarm, L.veg[f.veg] || f.veg, f.xfmr ? 'Transformer visible' : 'No transformer visible', Number.isInteger(f.att) ? `${f.att} estimated attachment${f.att === 1 ? '' : 's'}` : 'Attachments: cannot tell'];
@@ -153,8 +157,6 @@
     const rv = review[r.id] || { flags: {}, note: '' };
     const frameFlags = f ? [(f.lean === 'moderate' || f.lean === 'severe') && L.flag.lean, f.xarm === 'damaged' && L.flag.crossarm, f.veg === 'touching' && L.flag.vegetation, f.xfmr && L.flag.xfmr, Number.isInteger(f.att) && f.att >= 3 && `${f.att} estimated attachments`].filter(Boolean) : [];
     const m = f && f.marks;
-    // SVG is drawn in a 1000 x 1000 box stretched over the image; coordinates are fractions of the crop.
-    // overlay box matches the crop's pixel size so the stretch is uniform and circles stay round
     const SW = f && f.size ? f.size[0] : 1000, SH = f && f.size ? f.size[1] : 1000, R = Math.max(9, Math.round(Math.min(SW, SH) / 28));
     const X = p => p[0] * SW, Y = p => p[1] * SH, px = p => `${X(p).toFixed(1)},${Y(p).toFixed(1)}`;
     const circle = (p, cls, label) => `<circle class="mk ${cls}" cx="${X(p)}" cy="${Y(p)}" r="${R}" vector-effect="non-scaling-stroke"/>${label ? `<text x="${X(p)}" y="${Y(p) + R * 0.38}" text-anchor="middle" font-size="${R * 1.1}">${esc(label)}</text>` : ''}`;
@@ -170,84 +172,85 @@
     }
     const overlay = svg ? `<svg class="ov" viewBox="0 0 ${SW} ${SH}" preserveAspectRatio="none" aria-hidden="true">${svg}</svg>` : '';
     const badges = frameFlags.length && state.badges ? `<div class="badges" aria-hidden="true">${frameFlags.map(x => `<span class="flag ${/attachments/.test(x) ? 'att' : x === L.flag.xfmr ? '' : 'issue'}">${esc(x)}</span>`).join('')}</div>` : '';
-    const photo = f && f.img ? `<div class="imgwrap"><img id="dimg" src="${esc(f.img)}" alt="Photo of ${esc(r.id)} taken ${esc(dateLabel(f))}">${overlay}${badges}</div>`
+    const photo = f && f.img ? `<div class="imgwrap"><img id="dimg" src="${esc(f.img)}" alt="Photo of ${esc(r.id)} taken ${esc(dateLabel(f))}">${overlay}</div>${badges}`
       : `<div class="photo-missing">Photo unavailable.${f && f.url ? ` <a href="${esc(f.url)}" target="_blank" rel="noopener">Open source photo</a>` : ''}</div>`;
-    const others = r.frames.length > 1 ? `<div class="sec"><h3>Other photos</h3><p class="small muted" style="margin:0 0 6px">${r.frames.length} photos · ${r.seq} drive${r.seq === 1 ? '' : 's'}</p>
-      <div class="thumbs">${r.frames.map((x, i) => `<button data-i="${i}" aria-pressed="${i === state.viewing}" aria-label="View photo from ${esc(dateLabel(x))}">${x.img ? `<img src="${esc(x.img)}" alt="">` : `<span class="ph" style="width:80px;height:80px;display:grid;place-items:center;font-size:11px">No image</span>`}<span class="c">${esc(x.date || '?')}</span></button>`).join('')}</div>
-      <p style="margin:8px 0 0"><button class="btn sm" id="cmp" aria-pressed="${state.compare}">Compare photos</button></p>
-      ${state.compare ? compareHtml(r) : ''}</div>` : '';
-    const latest = r.latest && r.latest.ts && (!f || r.latest.ts > (f.ts || 0)) ? `<div class="k">Latest available photo</div><div>${esc(dateLabel(r.latest))}${r.latest.classified ? '' : ', not assessed (pole too small in frame)'}${r.latest.url ? ` · <a href="${esc(r.latest.url)}" target="_blank" rel="noopener">Open source photo</a>` : ''}</div>` : '';
+    const ovbar = `<div class="ovbar" role="group" aria-label="Photo annotations">
+        <button class="o" id="tg-outline" aria-pressed="${state.outline}" ${f && f.poly ? '' : 'disabled'}><i></i>Outline</button>
+        <button class="m" id="tg-markers" aria-pressed="${state.markers}" ${m ? '' : 'disabled'}><i></i>Markers</button>
+        <button class="b" id="tg-badges" aria-pressed="${state.badges}" ${frameFlags.length ? '' : 'disabled'}><i></i>Badges</button></div>`;
+    const mkList = m && state.markers && m.att.length ? `<span class="mk-list">${m.att.map((a, i) => `${i + 1} ${esc(a.l)}`).join(' · ')}</span>` : (m && state.markers ? `<span class="mk-list">Approximate model positions</span>` : '');
+    const strip = r.frames.length > 1 ? `<div class="strip"><span class="lbl">${r.frames.length} photos<br>${r.seq} drive${r.seq === 1 ? '' : 's'}</span>
+        <div class="thumbs">${r.frames.map((x, i) => `<button data-i="${i}" aria-pressed="${i === state.viewing}" aria-label="View photo from ${esc(dateLabel(x))}">${x.img ? `<img src="${esc(x.img)}" alt="">` : `<span class="ph"></span>`}<span class="c">${esc(x.date || '?')}</span></button>`).join('')}</div>
+        <button class="btn sm cmp" id="cmp" aria-pressed="${state.compare}">Compare</button></div>${state.compare ? compareHtml(r) : ''}` : '';
+    const latest = r.latest && r.latest.ts && (!f || r.latest.ts > (f.ts || 0)) ? `<a href="${esc(r.latest.url)}" target="_blank" rel="noopener">Latest available photo ${esc(dateLabel(r.latest))}${r.latest.classified ? '' : ' (not assessed)'} ↗</a>` : '';
+    const fieldLine = (label, key) => `<div class="it"><span>${esc(label)}</span>${dots(r, key)}</div>`;
+    const flagItems = flags.map(k => {
+      const label = k === 'lean' ? L.lean[r.lean] : k === 'crossarm' ? L.xarm[r.xarm] : k === 'vegetation' ? L.veg[r.veg] : k === 'att3' ? attLabel(r) : xfmrLabel(r);
+      const key = k === 'lean' ? 'lean' : k === 'crossarm' ? 'xarm' : k === 'vegetation' ? 'veg' : k === 'att3' ? 'att' : 'xfmr';
+      return `<div class="it"><span class="flag ${k === 'att3' ? 'att' : k === 'xfmr' ? '' : 'issue'}">${esc(label)}</span>${dots(r, key)}</div>`;
+    }).join('');
+    const rest = [
+      !PP.possibleLean(r) && fieldLine(L.lean[r.lean] || r.lean, 'lean'),
+      !PP.crossarmDamage(r) && fieldLine(L.xarm[r.xarm] || r.xarm, 'xarm'),
+      !PP.vegetationContact(r) && fieldLine(L.veg[r.veg] || r.veg, 'veg'),
+      !PP.transformerVisible(r) && fieldLine(xfmrLabel(r), 'xfmr'),
+      !PP.attachments3(r) && fieldLine(attLabel(r), 'att'),
+      fieldLine(`${esc(L.type[r.type] || r.type)} · ${esc(L.mat[r.material] || r.material)}`, 'type'),
+    ].filter(Boolean).join('');
     $('detail').innerHTML = `
-      <div class="detail-h"><button class="btn sm" id="back" aria-label="Back to list">← Back to list</button><span class="id">${esc(r.id)}</span>
-        <div class="nav"><span class="small muted" id="pos"></span><button class="btn sm" id="prev" aria-label="Previous pole">Prev</button><button class="btn sm" id="next" aria-label="Next pole">Next</button><button class="btn sm" id="close" aria-label="Close details">Close</button></div></div>
+      <div class="detail-h"><button class="btn sm" id="back" aria-label="Back to list">← List</button><span class="id">${esc(r.id)}</span><span class="pos" id="pos"></span>
+        <div class="nav"><button class="btn sm" id="prev" aria-label="Previous pole">Prev</button><button class="btn sm" id="next" aria-label="Next pole">Next</button><button class="btn sm" id="share">Copy link</button><button class="btn sm" id="close" aria-label="Close details">Close</button></div></div>
       ${state.example ? `<div class="example-tag">Example record. Pick any pole from the list or map.</div>` : ''}
       <div class="dbody">
-      <div class="dphoto">
-        <div class="photo">${photo}</div>
-        <div class="cap"><span><span class="muted">Photo taken</span> <b>${esc(dateLabel(f))}</b>${f && f.pano ? ' · 360° photo' : ''}${f && f.shown ? (r.shown.newest ? ' · newest readable' : ' · clearest available') : ''}</span>
-          ${f && f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">Open source photo</a>` : ''}${f && f.img ? `<button class="btn sm" id="enlarge">Enlarge</button>` : ''}${f && f.by ? `<span class="muted small">by ${esc(f.by)} (Mapillary)</span>` : ''}</div>
-        <div class="ovbar" role="group" aria-label="Photo annotations">
-          <span class="muted">Show:</span>
-          <label><input type="checkbox" id="tg-outline" ${state.outline ? 'checked' : ''} ${f && f.poly ? '' : 'disabled'}> Pole outline</label>
-          <label><input type="checkbox" id="tg-markers" ${state.markers ? 'checked' : ''} ${m ? '' : 'disabled'}> Markers</label>
-          <label><input type="checkbox" id="tg-badges" ${state.badges ? 'checked' : ''} ${frameFlags.length ? '' : 'disabled'}> Flag badges</label>
+        <div class="dphoto">
+          <div class="stage">${photo}${f && f.img ? ovbar : ''}</div>
+          <div class="cap"><span><b>${esc(dateLabel(f))}</b>${f && f.pano ? ' · 360°' : ''}${f && f.shown ? (r.shown.newest ? ' · newest readable' : ' · clearest available') : ''}</span>
+            ${f && f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">Source ↗</a>` : ''}${f && f.img ? `<a href="#" id="enlarge">Enlarge</a>` : ''}${f && f.by ? `<span class="muted small">by ${esc(f.by)}</span>` : ''}${mkList}</div>
+          ${strip}
         </div>
-        ${m && state.markers ? `<div class="mklegend"><span><i style="border-color:#1b5e8a"></i>Detected pole (Mapillary)</span><span><i style="border-color:#8fd3ff;border-style:dashed"></i>Pole axis</span><span><i style="border-color:#2c6e6b"></i>Attachment, numbered (${m.att.length})</span>${m.xfmr ? '<span><i class="sq" style="border-color:#1c1c1a"></i>Transformer</span>' : ''}${m.xarm ? '<span><i class="tri"></i>Crossarm damage</span>' : ''}${m.veg ? '<span><i class="dm" style="border-color:#c2410c"></i>Vegetation contact</span>' : ''}</div>
-        <p class="ovnote">Approximate model positions.${m.att.length ? ` ${m.att.map((a, i) => `${i + 1} ${esc(a.l)}`).join(' · ')}` : ''}</p>` : ''}
-        ${others}
-      </div>
-      <div class="dtext">
-      ${f ? `<div class="sec"><h3>This photo's observation</h3><div class="small">${frameObs(f).map(esc).join(' · ')}</div></div>` : ''}
-      <div class="sec"><h3>Model assessment${r.n > 1 ? ` · ${r.n} photos combined` : ''}</h3>
-        <div class="kv">
-          <div class="k">Type</div><div>${esc(L.type[r.type] || r.type)} <span class="agree">${esc(agreeText(r, 'type'))}</span></div>
-          <div class="k">Lean</div><div>${esc(L.lean[r.lean] || r.lean)} <span class="agree">${esc(agreeText(r, 'lean'))}</span></div>
-          <div class="k">Crossarm</div><div>${esc(L.xarm[r.xarm] || r.xarm)} <span class="agree">${esc(agreeText(r, 'xarm'))}</span></div>
-          <div class="k">Vegetation</div><div>${esc(L.veg[r.veg] || r.veg)} <span class="agree">${esc(agreeText(r, 'veg'))}</span></div>
-          <div class="k">Transformer</div><div>${esc(xfmrLabel(r))} <span class="agree">${esc(agreeText(r, 'xfmr'))}</span></div>
-          <div class="k">Attachments</div><div>${esc(attLabel(r))} <span class="agree">${esc(agreeText(r, 'att'))}</span></div>
-          <div class="k">Material</div><div>${esc(L.mat[r.material] || r.material)}</div>
-          ${latest}
-          <div class="k">Location</div><div class="mono small">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)} <span class="agree">${r.nfeat} detection${r.nfeat === 1 ? '' : 's'}</span></div>
+        <div class="dtext">
+          <div class="sec"><h3>Model flags · ${r.n} photo${r.n === 1 ? '' : 's'}</h3><div class="fl">${flagItems || `<div class="it"><span class="flag dim">${PP.conditionUnclear(r) ? 'Cannot tell from photos' : 'No model flag'}</span></div>`}${rest}</div>
+            <p class="hint">${r.n > 1 ? 'Filled dot: a photo agreeing with the combined value. ' : ''}${f ? `This photo: ${frameObs(f).map(esc).join(' · ')}.` : ''}</p></div>
+          ${util && flags.length ? `<div class="sec review"><h3>Your review · saved in this browser</h3>
+            ${flags.map(k => `<div class="it"><span>${esc(L.flag[k])}</span><span class="seg" role="group" aria-label="Does the photo support ${esc(L.flag[k])}?">${['supported', 'not_supported', 'cannot_tell'].map(v => `<button class="${v === 'supported' ? 'yes' : ''}" data-rf="${k}" data-rv="${v}" aria-pressed="${rv.flags[k] === v}" title="${L.reviewLong[v]}">${L.review[v]}</button>`).join('')}</span></div>`).join('')}
+            <textarea id="rnote" maxlength="500" placeholder="Note (optional)" aria-label="Review note">${esc(rv.note || '')}</textarea>
+            <p class="hint">Saved in this browser only. <button class="btn sm" id="rreset">Reset</button></p></div>` : ''}
+          <div class="sec"><h3>Location</h3><div class="mini" id="mini"></div>
+            <div class="kv">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)} <span>· ${r.nfeat} detection${r.nfeat === 1 ? '' : 's'} · estimate</span> · <button class="btn sm" id="fullmap">Full map</button></div></div>
+          <div class="links">${latest}<details class="tech"><summary>Technical details</summary>
+            <p class="small muted">Raw model output per photo. Self-rating is uncalibrated. Notes are free text and may overstate.</p>
+            <table><thead><tr><th>Photo</th><th>Pole px</th><th>Type</th><th>Lean</th><th>Crossarm</th><th>Veg.</th><th>Xfmr</th><th>Att.</th><th>Self-rating</th><th>Note</th></tr></thead>
+            <tbody>${r.frames.map(x => `<tr><td class="mono">${esc(x.date || '?')}${x.pano ? ' 360°' : ''}</td><td class="mono">${x.px ?? ''}</td><td>${esc(x.type)}</td><td>${esc(x.lean)}</td><td>${esc(x.xarm)}</td><td>${esc(x.veg)}</td><td>${x.xfmr ? 'yes' : 'no'}</td><td class="mono">${x.att ?? ''}</td><td class="mono">${x.conf ?? ''}</td><td>${esc(x.note)}</td></tr>`).join('')}</tbody></table>
+            <p class="small muted">Mapillary features: <span class="mono">${r.features.map(esc).join(', ')}</span> · grouped within ${esc(D.meta.method.radius_m)} m · demo id, not an asset id.</p></details></div>
         </div>
-        </div></div>
-      ${util && flags.length ? `<div class="sec review"><h3>Your review</h3>
-        ${flags.map(k => `<div><div class="small"><b>${esc(L.flag[k])}</b></div><div class="opt" role="group" aria-label="Review ${esc(L.flag[k])}">${['supported', 'not_supported', 'cannot_tell'].map(v => `<button class="btn sm" data-rf="${k}" data-rv="${v}" aria-pressed="${rv.flags[k] === v}">${L.review[v]}</button>`).join('')}</div></div>`).join('')}
-        <label class="small" for="rnote">Note (optional)</label><textarea id="rnote" maxlength="500">${esc(rv.note || '')}</textarea>
-        <p class="scope">Saved in this browser only. <button class="btn sm" id="rreset">Reset</button></p></div>` : ''}
-      <details class="tech sec"><summary>Technical details</summary>
-        <p class="small muted">Raw model output per photo. Self-rating is uncalibrated. Notes are free text and may overstate.</p>
-        <table><thead><tr><th>Photo</th><th>Pole px</th><th>Type</th><th>Lean</th><th>Crossarm</th><th>Veg.</th><th>Xfmr</th><th>Att.</th><th>Self-rating</th><th>Note</th></tr></thead>
-        <tbody>${r.frames.map(x => `<tr><td class="mono">${esc(x.date || '?')}${x.pano ? ' 360°' : ''}</td><td class="mono">${x.px ?? ''}</td><td>${esc(x.type)}</td><td>${esc(x.lean)}</td><td>${esc(x.xarm)}</td><td>${esc(x.veg)}</td><td>${x.xfmr ? 'yes' : 'no'}</td><td class="mono">${x.att ?? ''}</td><td class="mono">${x.conf ?? ''}</td><td>${esc(x.note)}</td></tr>`).join('')}</tbody></table>
-        <p class="small muted">Mapillary features: <span class="mono">${r.features.map(esc).join(', ')}</span> · grouped within ${esc(D.meta.method.radius_m)} m · demo id, not an asset id.</p></details>
-      </div></div>`;
+      </div>`;
     $('detail').hidden = false;
     updateDetailNav();
+    if (mapApi) mapApi.toMini();
   }
   function compareHtml(r) {
     const a = r.frames[state.viewing], b = r.frames.find((x, i) => i !== state.viewing && x.img) || null;
-    if (!a || !b || !a.img) return `<p class="small muted">Only one photo has an in-app image. Others are available through their source links above.</p>`;
-    const fig = x => `<figure><img src="${esc(x.img)}" alt="Photo taken ${esc(dateLabel(x))}"><figcaption><b>${esc(dateLabel(x))}</b> · ${esc(frameObs(x).slice(0, 1)[0])}, ${esc(frameObs(x)[4])}</figcaption></figure>`;
-    return `<div class="compare" style="margin-top:8px">${fig(a)}${fig(b)}</div><p class="small muted" style="margin:4px 0 0">Two photos of the same record. Differences are not confirmed changes; angle, distance, and camera differ.</p>`;
+    if (!a || !b || !a.img) return `<p class="hint" style="padding:0 12px 8px">Only one photo has an in-app image; others are available through their source links.</p>`;
+    const fig = x => `<figure><img src="${esc(x.img)}" alt="Photo taken ${esc(dateLabel(x))}"><figcaption><b>${esc(dateLabel(x))}</b> · ${esc(frameObs(x)[0])}, ${esc(frameObs(x)[4])}</figcaption></figure>`;
+    return `<div class="compare">${fig(a)}${fig(b)}</div><p class="hint" style="padding:0 12px 8px;margin:0">Two photos of the same record. Differences are not confirmed changes; angle, distance, and camera differ.</p>`;
   }
 
   // ---------- map ----------
   function initMap() {
-    const box = $('map');
-    const fail = msg => { box.innerHTML = `<div class="map-fallback"><div>${esc(msg)}</div></div>`; $('legend').hidden = true; $('fit').hidden = true; $('resetview').hidden = true; };
-    if (typeof window.maplibregl === 'undefined') { fail('The map could not load. You can still review photos and export the list.'); return null; }
+    const box = $('map'), FALL = 'The map could not load. You can still review photos and export the list.';
+    const fail = () => { box.innerHTML = `<div class="map-fallback"><div>${FALL}</div></div>`; $('legend').hidden = true; $('fit').hidden = true; $('resetview').hidden = true; return { failed: true, setData() {}, select() {}, fit() {}, reset() {}, recolor() {}, resize() {},
+      toMini() { const mini = $('mini'); if (mini) mini.innerHTML = `<div class="map-fallback"><div>${FALL}</div></div>`; }, toMain() {} }; };
+    if (typeof window.maplibregl === 'undefined') return fail();
     let map;
     try {
       map = new maplibregl.Map({ container: 'map', center: D.meta.center, zoom: 14.5, attributionControl: true,
         style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap contributors' } },
                  layers: [{ id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-saturation': -0.6, 'raster-opacity': 0.9 } }] } });
-    } catch (e) { fail('The map could not load. You can still review photos and export the list.'); return null; }
+    } catch (e) { return fail(); }
+    const category = r => !PP.isUtility(r) ? 'other' : state.colorMode === 'attachments' ? (Number.isInteger(r.att) ? (r.att >= 3 ? 'a3' : r.att >= 1 ? 'a1' : 'a0') : 'unclear') : PP.hasConditionIssue(r) ? 'issue' : PP.conditionUnclear(r) ? 'unclear' : 'none';
     const toFC = rows => ({ type: 'FeatureCollection', features: rows.map(r => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [r.lon, r.lat] }, properties: { id: r.id, cat: category(r) } })) });
-    const category = r => !PP.isUtility(r) ? 'other' : state.colorMode === 'attachments' ? (Number.isInteger(r.att) ? (r.att >= 3 ? 'a3' : r.att >= 1 ? 'a1' : 'a0') : 'unclear')
-      : PP.hasConditionIssue(r) ? 'issue' : PP.conditionUnclear(r) ? 'unclear' : 'none';
     const COLORS = { issue: '#c2410c', none: '#ffffff', unclear: '#e3e3df', other: '#bcbcb7', a3: '#2c6e6b', a1: '#9ccbc9', a0: '#ffffff' };
-    let ready = false, pendingSel = null;
-    map.on('error', e => { if (!ready && e && e.error && /style|source|Failed to fetch/i.test(String(e.error.message || e.error))) fail('The map could not load. You can still review photos and export the list.'); });
+    let ready = false, pendingSel = null, mode = 'main';
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
     map.on('load', () => {
       ready = true;
@@ -255,7 +258,7 @@
       map.addSource('sel', { type: 'geojson', data: toFC([]) });
       map.addLayer({ id: 'poles', type: 'circle', source: 'poles', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 3.5, 16, 6, 18, 9], 'circle-color': ['match', ['get', 'cat'], ...Object.entries(COLORS).flat(), '#ffffff'], 'circle-stroke-color': '#1c1c1a', 'circle-stroke-width': 1.2, 'circle-opacity': ['match', ['get', 'cat'], 'other', 0.6, 1] } });
       map.addLayer({ id: 'sel', type: 'circle', source: 'sel', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 9, 18, 16], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#1b5e8a', 'circle-stroke-width': 3 } });
-      map.on('click', 'poles', e => { const id = e.features[0].properties.id; select(id, { fromMap: true, focus: false }); });
+      map.on('click', 'poles', e => select(e.features[0].properties.id, { fromMap: true, focus: false }));
       map.on('mouseenter', 'poles', () => map.getCanvas().style.cursor = 'pointer');
       map.on('mouseleave', 'poles', () => map.getCanvas().style.cursor = '');
       if (pendingSel) api.select(pendingSel);
@@ -266,16 +269,15 @@
       select(r, fromMap) {
         if (!ready) { pendingSel = r; return; }
         map.getSource('sel').setData(toFC(r ? [r] : []));
-        if (r && !fromMap) {
-          // keep the marker beside the details: pad on the side the detail pane occupies
-          const wide = window.innerWidth >= 900;
-          map.easeTo({ center: [r.lon, r.lat], zoom: Math.max(map.getZoom(), 16.5), padding: wide ? { right: 0 } : { bottom: 0 }, duration: 400 });
-        }
+        if (r) map.easeTo({ center: [r.lon, r.lat], zoom: mode === 'mini' ? 17 : Math.max(map.getZoom(), 16.5), duration: fromMap ? 0 : 300 });
       },
       fit(rows) { if (!ready || !rows.length) return; const lons = rows.map(r => r.lon), lats = rows.map(r => r.lat); map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 40, duration: 400, maxZoom: 17 }); },
       reset() { if (ready) map.fitBounds(D.meta.bbox, { padding: 20, duration: 400 }); },
       recolor() { if (ready) { map.getSource('poles').setData(toFC(filtered)); renderLegend(); } },
       resize() { map.resize(); },
+      // move the one map instance into the record's Location slot and back
+      toMini() { const mini = $('mini'); if (!mini || mini.contains(box)) return; mini.appendChild(box); mode = 'mini'; map.resize(); const r = byId[state.selected]; if (r && ready) map.jumpTo({ center: [r.lon, r.lat], zoom: 17 }); },
+      toMain() { if (mode !== 'mini') return; $('mapwrap').insertBefore(box, $('mapwrap').firstChild); mode = 'main'; map.resize(); },
     };
     function renderLegend() {
       const cond = `<div><i style="background:#c2410c"></i>Possible condition issue</div><div><i style="background:#fff"></i>No model flag</div><div><i style="background:#e3e3df"></i>Cannot tell from photos</div>`;
@@ -293,80 +295,84 @@
     const v = [r.id, r.lat, r.lon, PP.isUtility(r), r.type, PP.conditionFlags(r).join(';'), r.lean, r.xarm, r.veg, r.xfmr, Number.isInteger(r.att) ? r.att : '', r.n, r.seq, r.shown.date || '', r.latest && r.latest.date || '', r.shown.url, reviewStatusLabel(r)];
     return v.map(x => { const s = String(x ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(',');
   }
-  function download(name, text, type) {
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  }
+  function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
   function exportCsv(rows) { download(`pole-pass-${D.meta.slug}-filtered.csv`, [CSV_COLS.join(','), ...rows.map(csvRow), '', D.meta.attribution].join('\n'), 'text/csv'); }
   function exportGeo(rows) {
     const fc = { type: 'FeatureCollection', license: 'ODbL 1.0', attribution: D.meta.attribution, dataset_version: D.meta.version,
       features: rows.map(r => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [r.lon, r.lat] }, properties: { id: r.id, is_utility_pole: PP.isUtility(r), pole_type: r.type, model_flags: PP.conditionFlags(r), lean: r.lean, crossarm: r.xarm, vegetation: r.veg, transformer: r.xfmr, attachments_estimate: r.att, photos_assessed: r.n, photo_shown_date: r.shown.date, source_photo_url: r.shown.url } })) };
     download(`pole-pass-${D.meta.slug}-filtered.geojson`, JSON.stringify(fc), 'application/geo+json');
   }
-  function exportReview() {
-    download(`pole-pass-${D.meta.slug}-review.json`, JSON.stringify({ dataset_version: D.meta.version, exported: new Date().toISOString(), scope: 'Local decisions from one browser. Not shared, not independently validated.', decisions: review }, null, 2), 'application/json');
-  }
+  function exportReview() { download(`pole-pass-${D.meta.slug}-review.json`, JSON.stringify({ dataset_version: D.meta.version, exported: new Date().toISOString(), scope: 'Local decisions from one browser. Not shared, not independently validated.', decisions: review }, null, 2), 'application/json'); }
 
   // ---------- wiring ----------
+  function toggleMenu(btnId, menuId, open) {
+    const m = $(menuId), b = $(btnId); const o = open == null ? m.hidden : open; m.hidden = !o; b.setAttribute('aria-expanded', String(o));
+  }
   function wire() {
     $('chips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; state.flag = b.dataset.f; refresh(); });
     ['year-min', 'year-max'].forEach(id => $(id).addEventListener('change', () => { readYearInputs(); refresh(); }));
     $('recent').title = `Photo taken ${THIS_YEAR - 4} or later`;
-    $('recent').addEventListener('click', () => { state.recent = state.recent ? null : THIS_YEAR - 4; $('recent').setAttribute('aria-pressed', String(!!state.recent)); refresh(); });
+    $('recent').addEventListener('click', () => { state.recent = state.recent ? null : THIS_YEAR - 4; $('recent').setAttribute('aria-pressed', String(!!state.recent)); readYearInputs(); refresh(); });
     $('sort').addEventListener('change', e => { state.sort = e.target.value; refresh(); });
-    $('reset').addEventListener('click', resetFilters);
+    $('reset').addEventListener('click', () => { resetFilters(); toggleMenu('dates-btn', 'dates-menu', false); });
     $('other').addEventListener('change', e => { state.other = e.target.checked; state.flag = 'all'; refresh(); if (mapApi) mapApi.recolor(); });
+    $('dates-btn').addEventListener('click', () => { toggleMenu('dates-btn', 'dates-menu'); toggleMenu('export-btn', 'export-menu', false); });
+    $('export-btn').addEventListener('click', () => { toggleMenu('export-btn', 'export-menu'); toggleMenu('dates-btn', 'dates-menu', false); });
+    document.addEventListener('click', e => { if (!e.target.closest('.menu')) { toggleMenu('export-btn', 'export-menu', false); toggleMenu('dates-btn', 'dates-menu', false); } });
+    $('count').addEventListener('click', e => { if (e.target.id === 'reset2') resetFilters(); });
     $('list').addEventListener('click', e => {
       const row = e.target.closest('.row'); if (row) { select(row.dataset.id); return; }
       if (e.target.id === 'more') { state.page++; renderList(); return; }
-      if (e.target.id === 'reset2') resetFilters();
+      if (e.target.id === 'reset3') resetFilters();
     });
     $('list').addEventListener('keydown', e => {
       const rows = [...$('list').querySelectorAll('.row')]; const i = rows.indexOf(document.activeElement); if (i < 0) return;
       if (e.key === 'ArrowDown' && rows[i + 1]) { e.preventDefault(); rows[i + 1].focus(); } if (e.key === 'ArrowUp' && rows[i - 1]) { e.preventDefault(); rows[i - 1].focus(); }
     });
     $('detail').addEventListener('click', e => {
-      const t = e.target.closest('button'); if (!t) return;
+      const t = e.target.closest('button, a#enlarge'); if (!t) return;
       if (t.id === 'back' || t.id === 'close') { close(); return; }
+      if (t.id === 'fullmap') { close(true); return; }
       if (t.id === 'prev') { step(-1); return; } if (t.id === 'next') { step(1); return; }
-      if (t.id === 'enlarge') { const f = byId[state.selected].frames[state.viewing]; $('lb-img').src = f.img; $('lb-img').alt = `Photo taken ${dateLabel(f)}`; $('lb-cap').textContent = `${state.selected} · Photo taken ${dateLabel(f)}`; $('lb-src').href = f.url; $('lb').showModal(); return; }
+      if (t.id === 'share') { const url = location.origin + location.pathname + `#pole=${encodeURIComponent(state.selected)}`; if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => { t.textContent = 'Copied'; setTimeout(() => { t.textContent = 'Copy link'; }, 1500); }); return; }
+      if (t.id === 'enlarge') { e.preventDefault(); const f = byId[state.selected].frames[state.viewing]; $('lb-img').src = f.img; $('lb-img').alt = `Photo taken ${dateLabel(f)}`; $('lb-cap').textContent = `${state.selected} · ${dateLabel(f)}`; $('lb-src').href = f.url; $('lb').showModal(); return; }
       if (t.id === 'cmp') { state.compare = !state.compare; renderDetail(); $('cmp').focus(); return; }
       if (t.id === 'rreset') { delete review[state.selected]; saveReview(review); renderDetail(); refreshRowStatus(); return; }
+      const k = { 'tg-outline': 'outline', 'tg-markers': 'markers', 'tg-badges': 'badges' }[t.id];
+      if (k) { state[k] = !state[k]; renderDetail(); $(t.id).focus(); return; }
       if (t.dataset.i != null) { state.viewing = +t.dataset.i; state.compare = false; renderDetail(); $('detail').querySelector(`[data-i="${state.viewing}"]`).focus(); return; }
       if (t.dataset.rf) { const rv = review[state.selected] || { flags: {}, note: '' }; rv.flags[t.dataset.rf] = rv.flags[t.dataset.rf] === t.dataset.rv ? null : t.dataset.rv; review[state.selected] = rv; saveReview(review); renderDetail(); refreshRowStatus(); $('detail').querySelector(`[data-rf="${t.dataset.rf}"][data-rv="${t.dataset.rv}"]`).focus(); }
     });
-    $('detail').addEventListener('change', e => { const k = { 'tg-outline': 'outline', 'tg-markers': 'markers', 'tg-badges': 'badges' }[e.target.id]; if (k) { state[k] = e.target.checked; renderDetail(); const el = $(e.target.id); if (el) el.focus(); } });
     $('detail').addEventListener('input', e => { if (e.target.id === 'rnote') { const rv = review[state.selected] || { flags: {}, note: '' }; rv.note = e.target.value; review[state.selected] = rv; saveReview(review); } });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && state.selected && !$('lb').open) close(); });
     $('lb-close').addEventListener('click', () => $('lb').close());
-    $('export-btn').addEventListener('click', () => { const m = $('export-menu'); m.hidden = !m.hidden; $('export-btn').setAttribute('aria-expanded', String(!m.hidden)); });
-    document.addEventListener('click', e => { if (!e.target.closest('.menu')) { $('export-menu').hidden = true; $('export-btn').setAttribute('aria-expanded', 'false'); } });
     $('exp-csv-f').addEventListener('click', () => exportCsv(filtered)); $('exp-geo-f').addEventListener('click', () => exportGeo(filtered)); $('exp-review').addEventListener('click', exportReview);
     $('fit').addEventListener('click', () => mapApi && mapApi.fit(filtered)); $('resetview').addEventListener('click', () => mapApi && mapApi.reset());
     $('filters-toggle').addEventListener('click', () => { const open = $('toolbar').classList.toggle('open'); $('filters-toggle').setAttribute('aria-expanded', String(open)); });
+    document.querySelectorAll('.mobilebar [role=tab]').forEach(b => b.addEventListener('click', () => { state.tab = b.dataset.tab; $('ws').dataset.tab = state.tab; document.querySelectorAll('.mobilebar [role=tab]').forEach(x => x.setAttribute('aria-selected', String(x === b))); if (mapApi) mapApi.resize(); }));
     const sizeWs = () => { if (window.innerWidth >= 900) { $('ws').style.height = Math.max(520, window.innerHeight - $('toolbar').offsetHeight) + 'px'; } else { $('ws').style.height = ''; } if (mapApi) mapApi.resize(); };
     window.addEventListener('resize', sizeWs); sizeWs();
-    document.querySelectorAll('.tabs [role=tab]').forEach(b => b.addEventListener('click', () => { state.tab = b.dataset.tab; $('ws').dataset.tab = state.tab; document.querySelectorAll('.tabs [role=tab]').forEach(x => x.setAttribute('aria-selected', String(x === b))); if (mapApi) mapApi.resize(); }));
     window.addEventListener('hashchange', () => { const id = parseHash(); if (id && id !== state.selected) select(id, { silent: true }); });
   }
-  function refreshRowStatus() { document.querySelectorAll('.row').forEach(el => { const r = byId[el.dataset.id]; const s = el.querySelector('.status'); if (r && s) { s.className = `status ${reviewStatus(r) || ''}`; s.textContent = reviewStatusLabel(r); } }); }
+  function refreshRowStatus() { document.querySelectorAll('.row').forEach(el => { const r = byId[el.dataset.id]; if (r) el.outerHTML = rowHtml(r); }); document.querySelectorAll('.row').forEach(el => el.setAttribute('aria-selected', String(el.dataset.id === state.selected))); }
   function parseHash() { const m = /[#&]pole=([^&]+)/.exec(location.hash); return m ? decodeURIComponent(m[1]) : null; }
 
   // ---------- init ----------
   function init() {
-    $('year-min').min = Y0 ?? ''; $('year-min').max = Y1 ?? ''; $('year-max').min = Y0 ?? ''; $('year-max').max = Y1 ?? '';
+    ['year-min', 'year-max'].forEach(id => { $(id).min = Y0 ?? ''; $(id).max = Y1 ?? ''; });
     $('year-min').value = Y0 ?? ''; $('year-max').value = Y1 ?? '';
-    $('year-min').placeholder = Y0 ?? '?'; $('year-max').placeholder = Y1 ?? '?';
     renderSummary();
     wire();
+    readYearInputs();
     refresh();
     const id = parseHash();
     if (id) {
-      if (!select(id, { silent: true, focus: false })) { $('count').insertAdjacentHTML('afterend', `<div class="empty">No record with id <span class="mono">${esc(id)}</span> in this dataset.</div>`); }
+      if (!select(id, { silent: true, focus: false })) $('count').insertAdjacentHTML('afterend', `<div class="empty">No record with id <span class="mono">${esc(id)}</span> in this dataset.</div>`);
     } else if (D.meta.example_id && byId[D.meta.example_id] && window.innerWidth >= 900) {
       select(D.meta.example_id, { example: true, silent: true, focus: false });
     }
     mapApi = initMap();
-    if (mapApi && state.selected) mapApi.select(byId[state.selected]);
+    if (state.selected) { mapApi.toMini(); mapApi.select(byId[state.selected]); }
   }
   try { init(); } catch (e) { $('count').textContent = 'The page failed to initialize.'; console.error(e); }
   window.PolePass = { state, select, close, refresh, get filtered() { return filtered; } };

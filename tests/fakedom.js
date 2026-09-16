@@ -18,7 +18,7 @@ class El {
   scrollIntoView() {}
   appendChild(c) { c.parent = this; this.children.push(c); return c; }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(c => c !== this); }
-  closest(sel) { let n = this; while (n) { if (matches(n, sel)) return n; n = n.parent; } return null; }
+  closest(sel) { const parts = sel.split(',').map(x => x.trim()); let n = this; while (n) { if (n instanceof El && parts.some(p => matches(n, p))) return n; n = n.parent; } return null; }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
   querySelectorAll(sel) { const out = []; const walk = n => { n.children.forEach(c => { if (sel.split(',').some(s => matches(c, s.trim()))) out.push(c); walk(c); }); }; walk(this); return out; }
   showModal() { this.open = true; } close() { this.open = false; }
