@@ -259,12 +259,15 @@
     const X = ts => ts1 === ts0 ? L + (W - L - R) / 2 : L + (ts - ts0) / (ts1 - ts0) * (W - L - R);
     const Y = t => T + (1 - t / ymax) * (H - T - B);
     // one label per distinct photo month, at that month's earliest photo; two staggered rows, dropped only when there is no room
-    const sameMonth = new Set(pts.map(p => r.frames[p.i].date)).size === 1;  // all photos in one month: label days instead
-    const lbl = p => sameMonth ? new Date(p.ts).toISOString().slice(0, 10) : (r.frames[p.i].date || '?');
+    // all photos in one month: label days; all in one day: label times (UTC, as Mapillary records them)
+    const iso = p => new Date(p.ts).toISOString();
+    const sameMonth = new Set(pts.map(p => r.frames[p.i].date)).size === 1, sameDay = sameMonth && new Set(pts.map(p => iso(p).slice(0, 10))).size === 1;
+    const lbl = p => sameDay ? iso(p).slice(11, 16) : sameMonth ? iso(p).slice(0, 10) : (r.frames[p.i].date || '?');
     const months = [...pts.reduce((m, p) => { const d = lbl(p); m.set(d, Math.min(m.get(d) ?? Infinity, p.ts)); return m; }, new Map())].sort((a, b) => a[1] - b[1]);
-    const MINGAP = sameMonth ? 66 : 48, rows = [[], []];
+    const MINGAP = sameDay ? 40 : sameMonth ? 66 : 48, rows = [[], []];
     months.forEach(([label, ts]) => { const x = Math.min(W - R - 22, Math.max(L + 22, X(ts))); const row = rows.find(rw => !rw.length || x - rw[rw.length - 1].x >= MINGAP); if (row) row.push({ x, label }); });
-    const xt = rows.map((row, k) => row.map(({ x, label }) => `<text x="${x.toFixed(1)}" y="${H - 16 + k * 10}" text-anchor="middle">${esc(label)}</text>`).join('')).join('');
+    const xt = rows.map((row, k) => row.map(({ x, label }) => `<text x="${x.toFixed(1)}" y="${H - 16 + k * 10}" text-anchor="middle">${esc(label)}</text>`).join('')).join('')
+      + (sameDay ? `<text x="${W - R}" y="${T - 2}" text-anchor="end">${esc(iso(pts[0]).slice(0, 10))} · times UTC</text>` : '');
     const yt = [0, 10, 20, 30].filter(v => v <= ymax).map(v => `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 4}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end">${v}°</text>`).join('');
     const band = cal ? `<rect class="band" x="${L}" y="${Y(cal.none_p90).toFixed(1)}" width="${W - L - R}" height="${(Y(0) - Y(cal.none_p90)).toFixed(1)}"/>` : '';
     const dots = pts.sort((a, b) => a.ts - b.ts).map(p => `<circle class="pt ${p.lean === 'moderate' || p.lean === 'severe' ? 'issue' : p.lean === 'slight' ? 'warn' : ''}${p.pano ? ' pano' : ''}${p.i === state.viewing ? ' cur' : ''}" data-i="${p.i}" tabindex="0" role="button" aria-label="View photo from ${esc(dateLabel(r.frames[p.i]))}, ${p.t.toFixed(1)} degrees in photo" cx="${X(p.ts).toFixed(1)}" cy="${Y(p.t).toFixed(1)}" r="5"><title>${esc(dateLabel(r.frames[p.i]))}: ${p.t.toFixed(1)}° in photo</title></circle>`).join('');
