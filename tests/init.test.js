@@ -88,7 +88,7 @@ test('multi-year filter keeps records photographed in 2+ years; compare pairs th
   const n = window.POLE_DATA.records.filter(r => r.util && new Set(r.frames.map(f => f.year).filter(y => y != null)).size >= 2).length;
   const cb = document.getElementById('years'); cb.checked = true; cb.dispatch('change');
   assert.equal(PP.filtered.length, n);
-  assert.equal(document.getElementById('years-n').textContent, String(n));
+  assert.equal(String(document.getElementById('years-n').textContent), String(n));
   if (!n) return;
   PP.select(PP.filtered[0].id);
   const detail = document.getElementById('detail');
