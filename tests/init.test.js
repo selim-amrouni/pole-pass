@@ -22,16 +22,15 @@ function boot(hash = '', width = 1440) {
   return { window, document, PP: window.PolePass, storage };
 }
 
-test('initializes without maplibregl: fallback shown, list and count rendered, example opened', () => {
+test('initializes without maplibregl: fallback shown, list and count rendered, nothing selected', () => {
   const { document, PP, window } = boot();
   assert.match(document.getElementById('map').innerHTML, /The map could not load/);
   assert.equal(document.getElementById('legend').hidden, true);
   const util = window.POLE_DATA.records.filter(r => r.util).length;
   assert.match(document.getElementById('count').innerHTML, new RegExp(`of <span class="mono">${util}</span>`));
   assert.equal(document.getElementById('list').querySelectorAll('.row').length, Math.min(20, util));
-  assert.equal(PP.state.selected, window.POLE_DATA.meta.example_id);
-  assert.match(document.getElementById('detail').innerHTML, /Example record/);
-  assert.match(document.getElementById('detail').innerHTML, /Model flags/);
+  assert.equal(PP.state.selected, null, 'no record opens by default; the map is the first view');
+  assert.equal(document.getElementById('ws').classList.contains('has-detail'), false);
 });
 
 test('filters change list, count, and filtered export together', () => {

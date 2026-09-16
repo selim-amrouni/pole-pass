@@ -368,9 +368,7 @@
     const id = parseHash();
     if (id) {
       if (!select(id, { silent: true, focus: false })) $('count').insertAdjacentHTML('afterend', `<div class="empty">No record with id <span class="mono">${esc(id)}</span> in this dataset.</div>`);
-    } else if (D.meta.example_id && byId[D.meta.example_id] && window.innerWidth >= 900) {
-      select(D.meta.example_id, { example: true, silent: true, focus: false });
-    }
+    }  // no record opens by default: the first view is the list beside the map
     mapApi = initMap();
     if (state.selected) { mapApi.toMini(); mapApi.select(byId[state.selected]); }
   }
