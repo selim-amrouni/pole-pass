@@ -168,7 +168,7 @@
     const diamond = (p, cls) => `<polygon class="mk ${cls}" points="${X(p)},${Y(p) - R * 1.3} ${X(p) + R * 1.3},${Y(p)} ${X(p)},${Y(p) + R * 1.3} ${X(p) - R * 1.3},${Y(p)}" vector-effect="non-scaling-stroke"/>`;
     const tri = (p, cls) => `<polygon class="mk ${cls}" points="${X(p)},${Y(p) - R * 1.3} ${X(p) + R * 1.2},${Y(p) + R} ${X(p) - R * 1.2},${Y(p) + R}" vector-effect="non-scaling-stroke"/>`;
     let svg = '';
-    if (f && f.poly && state.outline) svg += `<polygon class="halo" points="${f.poly.map(p => px(p)).join(' ')}"/><polygon class="line" points="${f.poly.map(p => px(p)).join(' ')}"/>`;
+    if (f && f.poly && f.poly.length && state.outline) svg += f.poly.map(ring => `<polygon class="halo" points="${ring.map(p => px(p)).join(' ')}"/><polygon class="line" points="${ring.map(p => px(p)).join(' ')}"/>`).join('');
     if (m && state.markers) {
       if (m.top && m.base) svg += `<line class="axis" x1="${X(m.top)}" y1="${Y(m.top)}" x2="${X(m.base)}" y2="${Y(m.base)}" vector-effect="non-scaling-stroke"/>`;
       m.att.forEach((a, i) => { if (a.p) svg += circle(a.p, 'att', String(i + 1)); });
@@ -179,13 +179,13 @@
     const photo = f && f.img ? `<div class="imgwrap"><img id="dimg" src="${esc(f.img)}" alt="Photo of ${esc(r.id)} taken ${esc(dateLabel(f))}">${overlay}</div>${badges}`
       : `<div class="photo-missing">Photo unavailable.${f && f.url ? ` <a href="${esc(f.url)}" target="_blank" rel="noopener">Open source photo</a>` : ''}</div>`;
     const ovbar = `<div class="ovbar" role="group" aria-label="Photo annotations">
-        <button class="o" id="tg-outline" aria-pressed="${state.outline}" ${f && f.poly ? '' : 'disabled'}><i></i>Outline</button>
+        <button class="o" id="tg-outline" aria-pressed="${state.outline}" ${f && f.poly && f.poly.length ? '' : 'disabled'}><i></i>Outline</button>
         <button class="m" id="tg-markers" aria-pressed="${state.markers}" ${m ? '' : 'disabled'}><i></i>Markers</button>
         <button class="b" id="tg-badges" aria-pressed="${state.badges}" ${frameFlags.length ? '' : 'disabled'}><i></i>Badges</button></div>`;
     // key for the overlay glyphs, only the ones drawn on this photo; sits bottom-left, opposite the toggles
     const G = { outline: '<rect x="4.5" y="1" width="5" height="12" rx="1"/>', axis: '<line x1="7" y1="1" x2="7" y2="13"/>', att: '<circle cx="7" cy="7" r="5.5"/>', xfmr: '<rect x="2" y="2" width="10" height="10"/>', xarm: '<polygon points="7,1.5 12.5,12 1.5,12"/>', veg: '<polygon points="7,1 13,7 7,13 1,7"/>' };
     const keyItems = [
-      f && f.poly && state.outline && ['outline', 'Mapillary outline'],
+      f && f.poly && f.poly.length && state.outline && ['outline', 'Mapillary outline'],
       m && state.markers && m.top && m.base && ['axis', 'Pole axis, model estimate'],
       m && state.markers && m.att.length && ['att', `Attachment 1${m.att.length > 1 ? `–${m.att.length}` : ''}`],
       m && state.markers && m.xfmr && ['xfmr', 'Transformer'],
