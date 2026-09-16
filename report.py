@@ -107,7 +107,12 @@ def build_records(poles, out_dir, polygons, marks):
         for f in p["frames"]:
             img = f"frames/{f['image_id']}.jpg" if resized(f.get("crop"), out_dir / "frames" / f"{f['image_id']}.jpg", FRAME_PX, 78) else None
             det = Path(f["crop"]).stem if f.get("crop") else None
-            frames.append({"poly": polygons.get(det), "marks": marks.get(det),"id": f["image_id"], "date": ms_date(f.get("captured_at")), "ts": f.get("captured_at"), "year": ms_year(f.get("captured_at")),
+            mk = marks.get(det)
+            if mk:  # markers explain this photo's own flags; the locator was told the assessment and may place items that were only "near"
+                mk = dict(mk, veg=mk["veg"] if f["vegetation"] == "touching" else None,
+                          xarm=mk["xarm"] if f["crossarm"] == "damaged" else None,
+                          xfmr=mk["xfmr"] if f["transformer"] else None)
+            frames.append({"poly": polygons.get(det), "marks": mk,"id": f["image_id"], "date": ms_date(f.get("captured_at")), "ts": f.get("captured_at"), "year": ms_year(f.get("captured_at")),
                            "url": f["url"], "px": f.get("px_h"), "pano": bool(f.get("is_pano")), "seq": f.get("sequence"), "img": img, "by": f.get("creator"),
                            "type": f["pole_type"], "lean": f["lean"], "xarm": f["crossarm"], "veg": f["vegetation"], "xfmr": bool(f["transformer"]),
                            "att": f["attachments"], "conf": f.get("confidence"), "note": f.get("note") or "", "shown": bool(f.get("shown"))})
