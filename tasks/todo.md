@@ -99,6 +99,13 @@ Coverage of five rural candidates (data/coverage/*/summary.json): Hardwick 2,718
 features, 71,371 images, 391/km2, photos 2013 to 2022 (8 years); Boonville 378 feats at 9 img/km2;
 Chester MA 225; Lake Placid 117; Tupper Lake 119. Hardwick picked; newest photos 2022 is the caveat.
 - [x] Territory selector in the header + city/backcountry tag, deploy.sh multi-bundle (branch feature/territories)
-- [ ] run.py Hardwick (logs/hardwick-run.log), then locate, tilt --calibrate, report (logs/hardwick-post.log)
-- [ ] Look at the Hardwick page, then deploy both: ./deploy.sh greenpoint-brooklyn-new-york hardwick-vermont
-- [ ] Merge feature/territories
+- [x] run.py Hardwick: fetch 8,137 photos (2.6 GB), classify 5,357 in 3 batches $5.56, locate 3 batches $6.15, 0 dropped; tilt calibrated; report 222 MB
+- [x] Hardwick page reviewed (outline multi-ring bug found and fixed), both territories deployed
+- [x] Merge feature/territories
+
+### Hardwick review (2026-09-16, data/poles/hardwick-vermont/summary.json, data/tilt/hardwick-vermont/calibration.json)
+- 1,672 records, 1,534 utility. Flags: vegetation 432, lean 35, crossarm 1; watch (slight lean) 777; transformer 61; 3+ attachments 0.
+- 444 utility poles photographed in 3+ distinct years (VTrans highway videolog, 2013 to 2022, every two years).
+- Tilt calibration, flat photos: none median 1.9 / p90 5.2 (n=2,182); slight 3.8; moderate 7.1; severe 31.3 (n=42). Cleaner than Greenpoint (highway camera, no panos).
+- Vegetation "touching" in the woods means canopy overlap in the photo; copy now says so.
+- Total API spend for Hardwick: $11.71.
