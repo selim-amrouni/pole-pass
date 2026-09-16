@@ -75,3 +75,21 @@ records + meta. Counts computed in JS from data via shared predicates, tested wi
 
 Density gate: passed everywhere. Project continues.
 Lesson: Graph API bbox search silently truncates; switched to vector tiles.
+
+## Hook pass (spec approved 2026-09-16, branch feature/hook-demo)
+Plan: ~/.claude/plans/polymorphic-discovering-fountain.md
+- [x] A. Warning tier: slight lean = watch (amber), moderate/severe + crossarm + vegetation = issue (orange)
+- [x] B. grade.py local grading page for data/validate/<slug>/sample.csv (blind by default)
+- [x] C. tilt.py apparent tilt per photo from the detection polygon, calibration.json, per-pole chart over time
+- [x] D. "Photographed in more than one year" filter + cross-year compare (23 utility poles). fetch --years dropped: verified 0 of 1725 features have a detection year their top-3 frames miss, so no new fetch or classify was needed
+- [x] E. Issues #18 (coverage-gap layer) and #19 (GIS match) filed; README/CLAUDE.md updated
+- [x] Code-reviewer findings addressed (static exports, strict summary key, flat calibration + pano dots, y-range, keyboard dots, grade.py value/origin/json guards, python tests)
+- [~] Hand grading scrapped 2026-09-16 (user is not a pole expert; crossarm etc. too hard to label). 3 of 50 rows partially graded, not scored. Page keeps its "Experimental, not verified" notice. grade.py stays for a future expert grader
+- [ ] User reviews the local page, then PR feature/hook-demo -> main and ./deploy.sh
+
+### Hook pass review (2026-09-16)
+- Warning tier: 363 of 620 utility poles are watch items (slight lean); 83 have a condition issue. Unchanged counts, new split.
+- Tilt calibration (data/tilt/greenpoint-brooklyn-new-york/calibration.json): abs degrees from vertical by model lean call, all photos:
+  none median 2.7 / p90 9.1 (n=1153); slight 4.5 / 12.1; moderate 8.4 / 15.0; severe 9.2 / 16.0. Panos are noisier than flat photos.
+- Multi-year records: 23 utility poles have assessed photos in 2+ distinct years (max 2 years each, spans 1 to 8 years). None in 3+.
+- No API calls made in this pass. Classifier batch: none.

@@ -13,12 +13,20 @@
   // "Possible condition issue": any of the three condition flags. Attachments and transformers are not condition issues.
   const conditionFlags = r => [possibleLean(r) && 'lean', crossarmDamage(r) && 'crossarm', vegetationContact(r) && 'vegetation'].filter(Boolean);
   const hasConditionIssue = r => conditionFlags(r).length > 0;
+  // "Watch item": one tier below a condition issue. Slight lean only, for now. Mirrors warning_flags() in dedupe.py.
+  const leanWarning = r => r.lean === 'slight';
+  const warningFlags = r => [leanWarning(r) && 'lean_slight'].filter(Boolean);
+  const hasWarning = r => warningFlags(r).length > 0;
+  // Distinct capture years among the assessed photos, ascending. Two or more: the record can be compared across years.
+  const frameYears = r => [...new Set((r.frames || []).map(f => f.year).filter(y => y != null))].sort((a, b) => a - b);
+  const spansYears = r => frameYears(r).length >= 2;
   // All three condition fields unreadable: the model could not assess condition from any photo.
   const conditionUnclear = r => r.lean === 'unclear' && r.xarm === 'unclear' && r.veg === 'unclear';
 
   const FILTERS = {
     all: r => true,
     lean: possibleLean,
+    lean_slight: leanWarning,
     xarm: crossarmDamage,
     veg: vegetationContact,
     att3: attachments3,
@@ -33,6 +41,7 @@
       if (state.yearMin != null && (r.shown.year == null || r.shown.year < state.yearMin)) return false;
       if (state.yearMax != null && (r.shown.year == null || r.shown.year > state.yearMax)) return false;
       if (state.recent && (r.shown.year == null || r.shown.year < state.recent)) return false;
+      if (state.years && !spansYears(r)) return false;
       return true;
     });
   }
@@ -45,6 +54,8 @@
       utility: util.length,
       other: records.length - util.length,
       conditionIssues: util.filter(hasConditionIssue).length,
+      warnings: util.filter(hasWarning).length,
+      spansYears: util.filter(spansYears).length,
       attachments3: util.filter(attachments3).length,
       transformer: util.filter(transformerVisible).length,
       lean: util.filter(possibleLean).length,
@@ -60,9 +71,9 @@
     date_desc: (a, b) => (b.shown.ts || 0) - (a.shown.ts || 0),
     date_asc: (a, b) => (a.shown.ts || 0) - (b.shown.ts || 0),
     att_desc: (a, b) => (b.att ?? -1) - (a.att ?? -1) || (b.shown.ts || 0) - (a.shown.ts || 0),
-    flags_desc: (a, b) => conditionFlags(b).length - conditionFlags(a).length || (b.shown.ts || 0) - (a.shown.ts || 0),
+    flags_desc: (a, b) => conditionFlags(b).length - conditionFlags(a).length || warningFlags(b).length - warningFlags(a).length || (b.shown.ts || 0) - (a.shown.ts || 0),
   };
 
   return { isUtility, possibleLean, crossarmDamage, vegetationContact, transformerVisible, attachments3,
-           conditionFlags, hasConditionIssue, conditionUnclear, FILTERS, applyFilters, summary, SORTS };
+           conditionFlags, hasConditionIssue, leanWarning, warningFlags, hasWarning, conditionUnclear, frameYears, spansYears, FILTERS, applyFilters, summary, SORTS };
 });

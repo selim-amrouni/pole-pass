@@ -36,12 +36,18 @@ to its source photo.
    frames, majority vote per field, keep disagreement rate as a column.
 5. `validate.py` sample 50 poles, write a CSV for hand grading, compute
    precision per flag type. Do not skip. The precision table is the only part
-   of the writeup anyone will trust.
-6. `report.py` fills `web/index.html` and copies `web/{style.css,app.js,predicates.js}`
+   of the writeup anyone will trust. `grade.py` serves the sample CSV as a
+   local page and writes grades back in place (blind by default).
+6. `tilt.py` apparent tilt per photo from the detection outline (medial axis,
+   signed degrees from vertical); `--calibrate` writes
+   `data/tilt/<slug>/calibration.json` from the model's own lean calls. It is
+   a property of the photo, not a lean measurement; the page says so.
+7. `report.py` fills `web/index.html` and copies `web/{style.css,app.js,predicates.js}`
    into `out/<slug>/` with `data.js`, exports, and per-frame images. Page copy
    lives in the template; counts are computed in the browser from data via
-   `web/predicates.js`, which mirrors `condition_flags()` in dedupe.py. Tests:
-   `node --test tests/`.
+   `web/predicates.js`, which mirrors `condition_flags()` and
+   `warning_flags()` in dedupe.py. Two tiers: issue (orange) and watch (amber,
+   slight lean only). Tests: `node --test tests/*.test.js` and `uv run python3 -m unittest discover -s tests`.
 
 Stretch: diff against OpenStreetMap `power=pole` in the same bbox via Overpass
 and report how many detected assets are absent from OSM.

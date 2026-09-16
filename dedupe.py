@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from coverage import DATA, ROOT, slugify
+from tilt import apparent_tilt
 
 VOTE_FIELDS = ["pole_present", "pole_type", "material", "lean_severity", "crossarm_condition",
                "transformer_present", "vegetation_contact", "attachment_count"]
@@ -55,6 +56,11 @@ def condition_flags(fields):
     if fields["vegetation_contact"] == "touching":
         out.append("vegetation")
     return out
+
+
+def warning_flags(fields):
+    """Watch items, one tier below a condition issue. Mirrors web/predicates.js warningFlags."""
+    return ["lean_slight"] if fields["lean_severity"] == "slight" else []
 
 
 def haversine_m(lon1, lat1, lon2, lat2):
@@ -149,6 +155,7 @@ def main():
             "crossarm": r["classification"]["crossarm_condition"], "vegetation": r["classification"]["vegetation_contact"],
             "transformer": r["classification"]["transformer_present"], "attachments": r["classification"]["attachment_count"],
             "confidence": r["classification"]["confidence"], "note": r["classification"].get("notes") or "",
+            "tilt": apparent_tilt(r.get("polygon_norm"), r.get("width"), r.get("height")),
             "shown": r is best,
         } for r in rs), key=lambda f: f["captured_at"] or 0)
         is_utility = bool(fields["pole_present"]) and fields["pole_type"] in UTILITY_TYPES
@@ -158,6 +165,7 @@ def main():
             "n_sequences": len({r["sequence"] for r in rs}),
             "is_utility_pole": is_utility, **fields, "votes": votes,
             "condition_flags": condition_flags(fields),
+            "warning_flags": warning_flags(fields),
             "mean_confidence": round(sum(c["confidence"] for c in cls) / len(cls), 2),
             "best_image_id": best["image_id"], "best_crop": best.get("crop"), "best_captured_at": best.get("captured_at"),
             "best_mapillary_url": best["mapillary_url"], "best_creator": best.get("creator"),
@@ -185,6 +193,7 @@ def main():
         "records_merged_from_multiple_features": sum(1 for p in poles if len(p["feature_ids"]) > 1),
         "utility_with_condition_flag": sum(1 for p in util if p["condition_flags"]),
         "utility_flag_counts": dict(Counter(f for p in util for f in p["condition_flags"])),
+        "utility_with_warning_flag": sum(1 for p in util if p["warning_flags"]),
         "utility_3plus_attachments": sum(1 for p in util if p["attachment_count"] >= 3),
         "utility_transformer": sum(1 for p in util if p["transformer_present"]),
         "attachment_histogram": {str(k): v for k, v in sorted(Counter(p["attachment_count"] for p in util).items())},

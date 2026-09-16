@@ -23,3 +23,19 @@
 - **A predicate test caught a copy-paste branch bug** (`state.other ? !isUtility : !isUtility`).
   Shared predicates for summaries, filters, and exports must have a unit test per
   branch; the bug would have shown poles under "other detected objects" silently.
+
+- **`node --test tests/` treats the directory as one failing test on this Node;
+  use `node --test tests/*.test.js`.** CLAUDE.md said the former. Pattern: when
+  a runner reports 1 test for a directory of N files, the invocation is wrong,
+  not the tests.
+
+- **A literal one-character sentinel typed into a heredoc-sized file became a
+  NUL byte** (`'\x00'` in grade.py). Python refused the source. Sentinels for
+  "clear this field" are a smell anyway; pass the real empty string and let the
+  server write it. Pattern: grep for NULs when a freshly written file fails to
+  parse at a line that looks fine.
+
+- **Check the data before building a fetch mode.** The per-year frame fetch
+  was fully implemented before a 20-line check showed 0 of 1,725 features had a
+  detection in a year their existing frames missed. Reverted. Pattern: for any
+  "fetch more X" feature, count the candidates from cache first.

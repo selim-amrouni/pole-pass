@@ -17,13 +17,23 @@ Live demo (Greenpoint, Brooklyn): https://selim-amrouni.github.io/pole-pass/
 4. `dedupe.py` merges frames of one pole, votes per field, keeps the
    disagreement rate as a reliability signal.
 5. `validate.py` writes a stratified 50-pole CSV for hand grading and computes
-   precision per flag. The precision table is the part to trust.
-6. `report.py` fills `web/index.html` and copies `web/*.{css,js}` into
+   precision per flag. The precision table is the part to trust. `grade.py`
+   serves that CSV as a local page (photo, buttons, keyboard) and writes the
+   grades back in place; the model's answers stay hidden unless asked for.
+6. `tilt.py` measures the apparent tilt of each pole outline in each photo and
+   calibrates it against the model's own lean calls (`--calibrate`), so the
+   page can say how far from vertical a straight pole reads.
+7. `report.py` fills `web/index.html` and copies `web/*.{css,js}` into
    `out/<territory>/` with `data.js`, CSV and GeoJSON exports, and per-photo
    images. `deploy.sh` pushes that folder to GitHub Pages.
 
+Flags come in two tiers. Possible condition issues (lean moderate or severe,
+crossarm damaged, vegetation touching) are orange. Watch items (slight lean)
+are amber and never counted as issues.
+
 Tests: `node --test tests/*.test.js` covers the shared filter predicates and
-initialization without a map library.
+initialization without a map library; `uv run python3 -m unittest discover -s tests`
+covers the tilt estimator and the grading CSV round trip.
 
 `run.py` chains 1 through 6. Everything caches under `data/`; a rerun makes no
 API calls.
@@ -37,7 +47,8 @@ uv run python3 run.py --town "Greenpoint, Brooklyn, New York" --skip-classify   
 uv run python3 run.py --town "Greenpoint, Brooklyn, New York"                   # the whole thing
 ```
 
-Then grade `data/validate/<slug>/sample.csv`, run `validate.py --score`, and
+Then grade the sample (`uv run python3 grade.py --town "..."`, or edit
+`data/validate/<slug>/sample.csv` by hand), run `validate.py --score`, and
 rerun `report.py`. Until a `precision.json` exists the page states that no
 validation results are published.
 
