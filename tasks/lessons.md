@@ -39,3 +39,10 @@
   was fully implemented before a 20-line check showed 0 of 1,725 features had a
   detection in a year their existing frames missed. Reverted. Pattern: for any
   "fetch more X" feature, count the candidates from cache first.
+
+- **The Batches API caps one submission at 256 MB.** 3,244 image requests
+  (Greenpoint) fit; 5,357 (Hardwick) returned 413 after a 17-minute fetch and
+  a full crop pass. classify.py and locate.py now submit in chunks of 2,000,
+  all up front so they process in parallel. Pattern: any "one request per
+  image" batch needs a size cap before the first territory bigger than the
+  demo.

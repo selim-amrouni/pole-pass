@@ -62,8 +62,11 @@ and report how many detected assets are absent from OSM.
   anthropic. Managed with uv (`uv sync`, run with `uv run python3 x.py`).
 - Classifier: `claude-sonnet-5` through the Batches API. Haiku 4.5 is the
   cost fallback per field once precision is graded.
-- Public webapp is Greenpoint only, hosted on GitHub Pages. Other territories
-  run on request.
+- Public webapp on GitHub Pages: one bundle per territory under `/<slug>/`,
+  listed in `web/territories.json` with a kind (city or backcountry) so the
+  header can brand the contrast. Greenpoint (city) and Hardwick VT (backcountry)
+  as of 2026-09-16. Deploy with `./deploy.sh <slug> [<slug> ...]`. Further
+  territories run on request.
 - Never commit `.env`.
 
 ## Target selection

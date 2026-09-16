@@ -62,7 +62,7 @@ def resized(src, dst, px, q=80):
 
 
 def load_polygons(slug):
-    """detection_id -> polygon normalized to the crop box (0..1), from fetch polygon + crop meta."""
+    """detection_id -> polygon rings normalized to the crop box (0..1), from fetch polygon + crop meta."""
     obs_path = DATA / "fetch" / slug / "observations.jsonl"
     out = {}
     if not obs_path.exists():
@@ -76,7 +76,8 @@ def load_polygons(slug):
         W, H = m["source_w"], m["source_h"]
         x0, y0, x1, y1 = m["box"]
         cw, ch = (x1 - x0) or 1, (y1 - y0) or 1
-        out[o["detection_id"]] = {"poly": [[round((x * W - x0) / cw, 4), round((y * H - y0) / ch, 4)] for x, y in o["polygon_norm"][0]],
+        # every ring: a detection split by an occluder has several, and the first is often not the largest
+        out[o["detection_id"]] = {"poly": [[[round((x * W - x0) / cw, 4), round((y * H - y0) / ch, 4)] for x, y in ring] for ring in o["polygon_norm"] if len(ring) >= 3],
                                   "size": m.get("crop_size")}
     return out
 

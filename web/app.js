@@ -50,7 +50,7 @@
       `<span class="pill issue" title="Possible lean, crossarm damage, or vegetation contact"><b>${s.conditionIssues}</b>possible condition issues</span>`,
       `<span class="pill warn" title="Slight lean in the photos: a watch item, not a condition issue"><b>${s.warnings}</b>to watch</span>`,
       `<span class="pill att" title="Visible non-electric attachments"><b>${s.attachments3}</b>with 3+ attachments</span>`,
-      `<span class="pill" title="Dates of the photos shown for the ${s.utility} poles${s.undated ? `; ${s.undated} without a date` : ''}"><b>${esc(dates)}</b>photo dates</span>`,
+      `<span class="pill" title="Dates of the photos shown for the ${s.utility} poles${s.undated ? `; ${s.undated} without a date` : ''}"><b>${esc(dates)}</b>photos</span>`,
     ].join('');
     $('dates-label').textContent = dates;
   }
@@ -168,7 +168,7 @@
     const diamond = (p, cls) => `<polygon class="mk ${cls}" points="${X(p)},${Y(p) - R * 1.3} ${X(p) + R * 1.3},${Y(p)} ${X(p)},${Y(p) + R * 1.3} ${X(p) - R * 1.3},${Y(p)}" vector-effect="non-scaling-stroke"/>`;
     const tri = (p, cls) => `<polygon class="mk ${cls}" points="${X(p)},${Y(p) - R * 1.3} ${X(p) + R * 1.2},${Y(p) + R} ${X(p) - R * 1.2},${Y(p) + R}" vector-effect="non-scaling-stroke"/>`;
     let svg = '';
-    if (f && f.poly && state.outline) svg += `<polygon class="halo" points="${f.poly.map(p => px(p)).join(' ')}"/><polygon class="line" points="${f.poly.map(p => px(p)).join(' ')}"/>`;
+    if (f && f.poly && f.poly.length && state.outline) svg += f.poly.map(ring => `<polygon class="halo" points="${ring.map(p => px(p)).join(' ')}"/><polygon class="line" points="${ring.map(p => px(p)).join(' ')}"/>`).join('');
     if (m && state.markers) {
       if (m.top && m.base) svg += `<line class="axis" x1="${X(m.top)}" y1="${Y(m.top)}" x2="${X(m.base)}" y2="${Y(m.base)}" vector-effect="non-scaling-stroke"/>`;
       m.att.forEach((a, i) => { if (a.p) svg += circle(a.p, 'att', String(i + 1)); });
@@ -179,13 +179,13 @@
     const photo = f && f.img ? `<div class="imgwrap"><img id="dimg" src="${esc(f.img)}" alt="Photo of ${esc(r.id)} taken ${esc(dateLabel(f))}">${overlay}</div>${badges}`
       : `<div class="photo-missing">Photo unavailable.${f && f.url ? ` <a href="${esc(f.url)}" target="_blank" rel="noopener">Open source photo</a>` : ''}</div>`;
     const ovbar = `<div class="ovbar" role="group" aria-label="Photo annotations">
-        <button class="o" id="tg-outline" aria-pressed="${state.outline}" ${f && f.poly ? '' : 'disabled'}><i></i>Outline</button>
+        <button class="o" id="tg-outline" aria-pressed="${state.outline}" ${f && f.poly && f.poly.length ? '' : 'disabled'}><i></i>Outline</button>
         <button class="m" id="tg-markers" aria-pressed="${state.markers}" ${m ? '' : 'disabled'}><i></i>Markers</button>
         <button class="b" id="tg-badges" aria-pressed="${state.badges}" ${frameFlags.length ? '' : 'disabled'}><i></i>Badges</button></div>`;
     // key for the overlay glyphs, only the ones drawn on this photo; sits bottom-left, opposite the toggles
     const G = { outline: '<rect x="4.5" y="1" width="5" height="12" rx="1"/>', axis: '<line x1="7" y1="1" x2="7" y2="13"/>', att: '<circle cx="7" cy="7" r="5.5"/>', xfmr: '<rect x="2" y="2" width="10" height="10"/>', xarm: '<polygon points="7,1.5 12.5,12 1.5,12"/>', veg: '<polygon points="7,1 13,7 7,13 1,7"/>' };
     const keyItems = [
-      f && f.poly && state.outline && ['outline', 'Mapillary outline'],
+      f && f.poly && f.poly.length && state.outline && ['outline', 'Mapillary outline'],
       m && state.markers && m.top && m.base && ['axis', 'Pole axis, model estimate'],
       m && state.markers && m.att.length && ['att', `Attachment 1${m.att.length > 1 ? `–${m.att.length}` : ''}`],
       m && state.markers && m.xfmr && ['xfmr', 'Transformer'],
@@ -414,6 +414,22 @@
   function refreshRowStatus() { document.querySelectorAll('.row').forEach(el => { const r = byId[el.dataset.id]; if (r) el.outerHTML = rowHtml(r); }); document.querySelectorAll('.row').forEach(el => el.setAttribute('aria-selected', String(el.dataset.id === state.selected))); }
   function parseHash() { const m = /[#&]pole=([^&]+)/.exec(location.hash); return m ? decodeURIComponent(m[1]) : null; }
 
+  // ---------- territories ----------
+  // The deployed site holds one bundle per territory under /<slug>/ and a territories.json at the root.
+  // A local preview has neither, so the selector stays hidden and the plain name shows.
+  function initTerritories() {
+    if (typeof fetch !== 'function') return;
+    fetch('../territories.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).then(list => {
+      if (!Array.isArray(list) || !list.some(t => t.slug === D.meta.slug)) return;
+      const me = list.find(t => t.slug === D.meta.slug);
+      const sel = $('territory');
+      sel.innerHTML = list.map(t => `<option value="${esc(t.slug)}"${t.slug === D.meta.slug ? ' selected' : ''}>${esc(t.name)}</option>`).join('');
+      sel.hidden = false; $('loc-name').hidden = true;
+      if (me.kind) { $('kind').textContent = me.kind; $('kind').className = `kind ${esc(me.kind)}`; $('kind').hidden = false; }
+      sel.addEventListener('change', e => { location.href = `../${encodeURIComponent(e.target.value)}/`; });
+    }).catch(() => { /* no territory list: single-territory page */ });
+  }
+
   // ---------- init ----------
   function init() {
     ['year-min', 'year-max'].forEach(id => { $(id).min = Y0 ?? ''; $(id).max = Y1 ?? ''; });
@@ -428,6 +444,7 @@
     }  // no record opens by default: the first view is the list beside the map
     mapApi = initMap();
     if (state.selected) { mapApi.toMini(); mapApi.select(byId[state.selected]); }
+    initTerritories();
   }
   try { init(); } catch (e) { $('count').textContent = 'The page failed to initialize.'; console.error(e); }
   window.PolePass = { state, select, close, refresh, get filtered() { return filtered; } };

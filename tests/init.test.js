@@ -7,9 +7,9 @@ const path = require('path');
 const { makeDocument } = require('./fakedom.js');
 
 const OUT = path.join(__dirname, '..', 'out', 'greenpoint-brooklyn-new-york');
-const IDS = ['summary', 'dates-label|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|button', 'other|input', 'years|input', 'years-n|span', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img'];
+const IDS = ['summary', 'dates-label|span', 'territory|select', 'loc-name|span', 'kind|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|button', 'other|input', 'years|input', 'years-n|span', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img'];
 
-function boot(hash = '', width = 1440) {
+function boot(hash = '', width = 1440, extra = {}) {
   const document = makeDocument(IDS.map(s => s.split('|')));
   const storage = {}; const localStorage = { getItem: k => storage[k] ?? null, setItem: (k, v) => { storage[k] = String(v); } };
   const window = { innerWidth: width, addEventListener() {}, PP: require('../web/predicates.js'), location: { hash, pathname: '/', search: '' } };
@@ -17,8 +17,8 @@ function boot(hash = '', width = 1440) {
   const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
   window.POLE_DATA = win.POLE_DATA;
   const app = fs.readFileSync(path.join(OUT, 'app.js'), 'utf8');
-  new Function('window', 'document', 'localStorage', 'history', 'location', 'CSS', 'URL', 'Blob', 'console', app)(
-    window, document, localStorage, history, window.location, { escape: s => s }, { createObjectURL: () => 'blob:' }, class {}, console);
+  new Function('window', 'document', 'localStorage', 'history', 'location', 'CSS', 'URL', 'Blob', 'console', 'fetch', app)(
+    window, document, localStorage, history, window.location, { escape: s => s }, { createObjectURL: () => 'blob:' }, class {}, console, extra.fetch);
   return { window, document, PP: window.PolePass, storage };
 }
 
@@ -113,4 +113,19 @@ test('photo key lists only the glyphs drawn on the current frame and follows the
   assert.match(detail.innerHTML, /Mapillary outline/);
   detail.querySelectorAll('button').find(b => b.id === 'tg-outline').click();
   assert.doesNotMatch(detail.innerHTML, /class="key"/);
+});
+
+test('territory selector appears only when a territories.json lists this bundle', async () => {
+  const list = [{ slug: 'greenpoint-brooklyn-new-york', name: 'Greenpoint, Brooklyn', kind: 'city' }, { slug: 'elsewhere', name: 'Elsewhere', kind: 'backcountry' }];
+  // the HTML ships both elements hidden; the fake DOM does not read attributes, so mirror that here
+  const hide = b => { b.document.getElementById('territory').hidden = true; b.document.getElementById('kind').hidden = true; return b; };
+  const withList = hide(boot('', 1440, { fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(list) }) }));
+  await new Promise(r => setTimeout(r, 0));
+  const sel = withList.document.getElementById('territory');
+  assert.equal(sel.hidden, false); assert.match(sel.innerHTML, /Elsewhere/); assert.match(sel.innerHTML, /selected>Greenpoint/);
+  assert.equal(withList.document.getElementById('kind').textContent, 'city');
+  const without = hide(boot('', 1440, { fetch: () => Promise.resolve({ ok: false }) }));
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(without.document.getElementById('territory').hidden, true);
+  assert.equal(without.document.getElementById('kind').hidden, true);
 });

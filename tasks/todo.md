@@ -93,3 +93,12 @@ Plan: ~/.claude/plans/polymorphic-discovering-fountain.md
   none median 2.7 / p90 9.1 (n=1153); slight 4.5 / 12.1; moderate 8.4 / 15.0; severe 9.2 / 16.0. Panos are noisier than flat photos.
 - Multi-year records: 23 utility poles have assessed photos in 2+ distinct years (max 2 years each, spans 1 to 8 years). None in 3+.
 - No API calls made in this pass. Classifier batch: none.
+
+## Second territory: Hardwick, Vermont (chosen 2026-09-16)
+Coverage of five rural candidates (data/coverage/*/summary.json): Hardwick 2,718 utility-pole
+features, 71,371 images, 391/km2, photos 2013 to 2022 (8 years); Boonville 378 feats at 9 img/km2;
+Chester MA 225; Lake Placid 117; Tupper Lake 119. Hardwick picked; newest photos 2022 is the caveat.
+- [x] Territory selector in the header + city/backcountry tag, deploy.sh multi-bundle (branch feature/territories)
+- [ ] run.py Hardwick (logs/hardwick-run.log), then locate, tilt --calibrate, report (logs/hardwick-post.log)
+- [ ] Look at the Hardwick page, then deploy both: ./deploy.sh greenpoint-brooklyn-new-york hardwick-vermont
+- [ ] Merge feature/territories
