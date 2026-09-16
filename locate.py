@@ -119,6 +119,7 @@ def main():
     ap.add_argument("--limit", type=int)
     ap.add_argument("--resume")
     ap.add_argument("--no-wait", action="store_true")
+    ap.add_argument("--chunk", type=int, default=2000, help="requests per batch submission")
     args = ap.parse_args()
     slug = slugify(args.town)
     src = DATA / "classify" / slug / "classifications.jsonl"
@@ -154,36 +155,41 @@ def main():
             from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
             from anthropic.types.messages.batch_create_params import Request
             bdir = DATA / "locate" / slug / "batches"; bdir.mkdir(parents=True, exist_ok=True)
+            # chunked submissions: the API caps one batch at 256 MB, and ~5,000 image requests overflow it
             if args.resume:
-                batch_id = args.resume
+                batch_ids = [args.resume]
             else:
-                reqs = [Request(custom_id=r["detection_id"], params=MessageCreateParamsNonStreaming(**build_request(ROOT / r["crop"], r["classification"]))) for r in todo]
-                b = client.messages.batches.create(requests=reqs)
-                batch_id = b.id
-                (bdir / f"{batch_id}.json").write_text(json.dumps({"id": batch_id, "n": len(reqs), "submitted": time.time()}))
-                print(f"submitted batch {batch_id} with {len(reqs)} requests")
+                batch_ids = []
+                for i in range(0, len(todo), args.chunk):
+                    chunk = todo[i:i + args.chunk]
+                    reqs = [Request(custom_id=r["detection_id"], params=MessageCreateParamsNonStreaming(**build_request(ROOT / r["crop"], r["classification"]))) for r in chunk]
+                    b = client.messages.batches.create(requests=reqs)
+                    (bdir / f"{b.id}.json").write_text(json.dumps({"id": b.id, "n": len(reqs), "submitted": time.time()}))
+                    print(f"submitted batch {b.id} with {len(reqs)} requests ({i + len(chunk)}/{len(todo)})")
+                    batch_ids.append(b.id)
                 if args.no_wait:
-                    print(f"collect later: --resume {batch_id}")
+                    print("collect later: --resume " + " / --resume ".join(batch_ids))
                     return
-            while True:
+            n_ok = n_bad = 0
+            for batch_id in batch_ids:
+              while True:
                 b = client.messages.batches.retrieve(batch_id)
                 if b.processing_status == "ended":
                     break
-                print(f"\r  {b.processing_status}: {b.request_counts.processing} processing", end="", flush=True)
+                print(f"\r  {batch_id} {b.processing_status}: {b.request_counts.processing} processing", end="", flush=True)
                 time.sleep(30)
-            n_ok = n_bad = 0
-            for res in client.messages.batches.results(batch_id):
-                did = res.custom_id
-                try:
-                    if res.result.type != "succeeded":
-                        raise ValueError(f"batch:{res.result.type}")
-                    rec, usage = parse(res.result.message)
-                    for kk in total: total[kk] += usage[kk]
-                    (res_dir / f"{did}.json").write_text(json.dumps({"detection_id": did, "model": MODEL, "result": rec, "usage": usage, "batch": batch_id}))
-                    n_ok += 1
-                except Exception as e:
-                    (res_dir / f"{did}.json").write_text(json.dumps({"detection_id": did, "dropped": f"{type(e).__name__}:{str(e)[:160]}"}))
-                    n_bad += 1
+              for res in client.messages.batches.results(batch_id):
+                  did = res.custom_id
+                  try:
+                      if res.result.type != "succeeded":
+                          raise ValueError(f"batch:{res.result.type}")
+                      rec, usage = parse(res.result.message)
+                      for kk in total: total[kk] += usage[kk]
+                      (res_dir / f"{did}.json").write_text(json.dumps({"detection_id": did, "model": MODEL, "result": rec, "usage": usage, "batch": batch_id}))
+                      n_ok += 1
+                  except Exception as e:
+                      (res_dir / f"{did}.json").write_text(json.dumps({"detection_id": did, "dropped": f"{type(e).__name__}:{str(e)[:160]}"}))
+                      n_bad += 1
             print(f"\nresults: {n_ok} ok, {n_bad} dropped   usage {total}   cost ${cost_usd(total, batch=True):.3f}")
     out = DATA / "locate" / slug / "locations.jsonl"
     n = 0

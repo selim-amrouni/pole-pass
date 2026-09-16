@@ -161,6 +161,7 @@ def main():
     ap.add_argument("--estimate", action="store_true", help="make crops, print expected cost, send nothing")
     ap.add_argument("--resume", help="batch id to collect instead of submitting")
     ap.add_argument("--no-wait", action="store_true", help="submit the batch and exit; collect later with --resume")
+    ap.add_argument("--chunk", type=int, default=BATCH_CHUNK, help="requests per batch submission")
     args = ap.parse_args()
 
     slug = slugify(args.town)
@@ -254,30 +255,42 @@ def run_direct(client, todo, res_dir):
     print(f"usage {total}  cost ${cost_usd(total, batch=False):.3f}")
 
 
+BATCH_CHUNK = 2000  # requests per batch; the API caps a submission at 256 MB and ~5,000 image requests overflow it
+
+
 def run_batch(client, todo, res_dir, slug, args):
+    """Submit `todo` in chunks (all at once, so they process in parallel), then wait for and collect each."""
     from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
     from anthropic.types.messages.batch_create_params import Request
     bdir = DATA / "classify" / slug / "batches"
     bdir.mkdir(parents=True, exist_ok=True)
     if args.resume:
-        batch_id = args.resume
+        batches = [(args.resume, todo)]
     else:
-        reqs = [Request(custom_id=o["detection_id"], params=MessageCreateParamsNonStreaming(**build_request(o, p))) for o, p in todo]
-        batch = client.messages.batches.create(requests=reqs)
-        batch_id = batch.id
-        (bdir / f"{batch_id}.json").write_text(json.dumps({"id": batch_id, "submitted": time.time(), "n": len(reqs),
-                                                            "detection_ids": [o["detection_id"] for o, _ in todo]}))
-        print(f"submitted batch {batch_id} with {len(reqs)} requests")
+        batches = []
+        for i in range(0, len(todo), args.chunk):
+            chunk = todo[i:i + args.chunk]
+            reqs = [Request(custom_id=o["detection_id"], params=MessageCreateParamsNonStreaming(**build_request(o, p))) for o, p in chunk]
+            batch = client.messages.batches.create(requests=reqs)
+            (bdir / f"{batch.id}.json").write_text(json.dumps({"id": batch.id, "submitted": time.time(), "n": len(reqs),
+                                                                "detection_ids": [o["detection_id"] for o, _ in chunk]}))
+            print(f"submitted batch {batch.id} with {len(reqs)} requests ({i + len(chunk)}/{len(todo)})")
+            batches.append((batch.id, chunk))
         if args.no_wait:
-            print(f"collect later: --resume {batch_id}")
+            print("collect later: --resume " + " / --resume ".join(b for b, _ in batches))
             return
+    for batch_id, chunk in batches:
+        collect_batch(client, batch_id, chunk, res_dir)
+
+
+def collect_batch(client, batch_id, todo, res_dir):
     while True:
         b = client.messages.batches.retrieve(batch_id)
         if b.processing_status == "ended":
             break
-        print(f"\r  {b.processing_status}: {b.request_counts.processing} processing, {b.request_counts.succeeded} done", end="", flush=True)
+        print(f"\r  {batch_id} {b.processing_status}: {b.request_counts.processing} processing, {b.request_counts.succeeded} done", end="", flush=True)
         time.sleep(30)
-    print(f"\nbatch ended: {b.request_counts}")
+    print(f"\nbatch {batch_id} ended: {b.request_counts}")
     total = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
     n_ok = n_bad = 0
     for r in client.messages.batches.results(batch_id):
