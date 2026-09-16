@@ -102,7 +102,7 @@ details.adv { font-size: 13px; } details.adv summary { cursor: pointer; color: v
 .imgwrap svg.ov .axis { stroke: #8fd3ff; stroke-width: 2px; stroke-dasharray: 6 4; fill: none; }
 .imgwrap svg.ov .mk { fill: rgba(255,255,255,.92); stroke-width: 2px; }
 .imgwrap svg.ov .mk.att { stroke: #2c6e6b; } .imgwrap svg.ov .mk.xfmr { stroke: #1c1c1a; } .imgwrap svg.ov .mk.issue { stroke: #c2410c; fill: rgba(253,240,232,.95); }
-.imgwrap svg.ov text { font: 600 11px var(--sans); fill: #1c1c1a; }
+.imgwrap svg.ov text { font-family: var(--sans); font-weight: 600; fill: #1c1c1a; }
 .ovbar { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 6px 12px; font-size: 12.5px; color: var(--ink-2); background: var(--panel); border-bottom: 1px solid var(--line-2); }
 .ovbar label { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; cursor: pointer; }
 .mklegend { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 4px 12px 8px; font-size: 12px; color: var(--ink-2); }

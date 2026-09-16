@@ -76,7 +76,8 @@ def load_polygons(slug):
         W, H = m["source_w"], m["source_h"]
         x0, y0, x1, y1 = m["box"]
         cw, ch = (x1 - x0) or 1, (y1 - y0) or 1
-        out[o["detection_id"]] = [[round((x * W - x0) / cw, 4), round((y * H - y0) / ch, 4)] for x, y in o["polygon_norm"][0]]
+        out[o["detection_id"]] = {"poly": [[round((x * W - x0) / cw, 4), round((y * H - y0) / ch, 4)] for x, y in o["polygon_norm"][0]],
+                                  "size": m.get("crop_size")}
     return out
 
 
@@ -112,7 +113,8 @@ def build_records(poles, out_dir, polygons, marks):
                 mk = dict(mk, veg=mk["veg"] if f["vegetation"] == "touching" else None,
                           xarm=mk["xarm"] if f["crossarm"] == "damaged" else None,
                           xfmr=mk["xfmr"] if f["transformer"] else None)
-            frames.append({"poly": polygons.get(det), "marks": mk,"id": f["image_id"], "date": ms_date(f.get("captured_at")), "ts": f.get("captured_at"), "year": ms_year(f.get("captured_at")),
+            pg = polygons.get(det) or {}
+            frames.append({"poly": pg.get("poly"), "size": pg.get("size"), "marks": mk,"id": f["image_id"], "date": ms_date(f.get("captured_at")), "ts": f.get("captured_at"), "year": ms_year(f.get("captured_at")),
                            "url": f["url"], "px": f.get("px_h"), "pano": bool(f.get("is_pano")), "seq": f.get("sequence"), "img": img, "by": f.get("creator"),
                            "type": f["pole_type"], "lean": f["lean"], "xarm": f["crossarm"], "veg": f["vegetation"], "xfmr": bool(f["transformer"]),
                            "att": f["attachments"], "conf": f.get("confidence"), "note": f.get("note") or "", "shown": bool(f.get("shown"))})

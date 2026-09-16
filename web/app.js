@@ -154,19 +154,21 @@
     const frameFlags = f ? [(f.lean === 'moderate' || f.lean === 'severe') && L.flag.lean, f.xarm === 'damaged' && L.flag.crossarm, f.veg === 'touching' && L.flag.vegetation, f.xfmr && L.flag.xfmr, Number.isInteger(f.att) && f.att >= 3 && `${f.att} estimated attachments`].filter(Boolean) : [];
     const m = f && f.marks;
     // SVG is drawn in a 1000 x 1000 box stretched over the image; coordinates are fractions of the crop.
-    const S = 1000, px = p => `${(p[0] * S).toFixed(1)},${(p[1] * S).toFixed(1)}`;
-    const circle = (p, cls, label) => `<circle class="mk ${cls}" cx="${p[0] * S}" cy="${p[1] * S}" r="11" vector-effect="non-scaling-stroke"/>${label ? `<text x="${p[0] * S}" y="${p[1] * S + 4}" text-anchor="middle">${esc(label)}</text>` : ''}`;
-    const square = (p, cls) => `<rect class="mk ${cls}" x="${p[0] * S - 10}" y="${p[1] * S - 10}" width="20" height="20" vector-effect="non-scaling-stroke"/>`;
-    const diamond = (p, cls) => `<polygon class="mk ${cls}" points="${px([p[0], p[1] - 0.013])} ${px([p[0] + 0.013, p[1]])} ${px([p[0], p[1] + 0.013])} ${px([p[0] - 0.013, p[1]])}" vector-effect="non-scaling-stroke"/>`;
-    const tri = (p, cls) => `<polygon class="mk ${cls}" points="${px([p[0], p[1] - 0.014])} ${px([p[0] + 0.013, p[1] + 0.01])} ${px([p[0] - 0.013, p[1] + 0.01])}" vector-effect="non-scaling-stroke"/>`;
+    // overlay box matches the crop's pixel size so the stretch is uniform and circles stay round
+    const SW = f && f.size ? f.size[0] : 1000, SH = f && f.size ? f.size[1] : 1000, R = Math.max(9, Math.round(Math.min(SW, SH) / 28));
+    const X = p => p[0] * SW, Y = p => p[1] * SH, px = p => `${X(p).toFixed(1)},${Y(p).toFixed(1)}`;
+    const circle = (p, cls, label) => `<circle class="mk ${cls}" cx="${X(p)}" cy="${Y(p)}" r="${R}" vector-effect="non-scaling-stroke"/>${label ? `<text x="${X(p)}" y="${Y(p) + R * 0.38}" text-anchor="middle" font-size="${R * 1.1}">${esc(label)}</text>` : ''}`;
+    const square = (p, cls) => `<rect class="mk ${cls}" x="${X(p) - R}" y="${Y(p) - R}" width="${2 * R}" height="${2 * R}" vector-effect="non-scaling-stroke"/>`;
+    const diamond = (p, cls) => `<polygon class="mk ${cls}" points="${X(p)},${Y(p) - R * 1.3} ${X(p) + R * 1.3},${Y(p)} ${X(p)},${Y(p) + R * 1.3} ${X(p) - R * 1.3},${Y(p)}" vector-effect="non-scaling-stroke"/>`;
+    const tri = (p, cls) => `<polygon class="mk ${cls}" points="${X(p)},${Y(p) - R * 1.3} ${X(p) + R * 1.2},${Y(p) + R} ${X(p) - R * 1.2},${Y(p) + R}" vector-effect="non-scaling-stroke"/>`;
     let svg = '';
     if (f && f.poly && state.outline) svg += `<polygon class="halo" points="${f.poly.map(p => px(p)).join(' ')}"/><polygon class="line" points="${f.poly.map(p => px(p)).join(' ')}"/>`;
     if (m && state.markers) {
-      if (m.top && m.base) svg += `<line class="axis" x1="${m.top[0] * S}" y1="${m.top[1] * S}" x2="${m.base[0] * S}" y2="${m.base[1] * S}" vector-effect="non-scaling-stroke"/>`;
+      if (m.top && m.base) svg += `<line class="axis" x1="${X(m.top)}" y1="${Y(m.top)}" x2="${X(m.base)}" y2="${Y(m.base)}" vector-effect="non-scaling-stroke"/>`;
       m.att.forEach((a, i) => { if (a.p) svg += circle(a.p, 'att', String(i + 1)); });
       if (m.xfmr) svg += square(m.xfmr, 'xfmr'); if (m.xarm) svg += tri(m.xarm, 'issue'); if (m.veg) svg += diamond(m.veg, 'issue');
     }
-    const overlay = svg ? `<svg class="ov" viewBox="0 0 ${S} ${S}" preserveAspectRatio="none" aria-hidden="true">${svg}</svg>` : '';
+    const overlay = svg ? `<svg class="ov" viewBox="0 0 ${SW} ${SH}" preserveAspectRatio="none" aria-hidden="true">${svg}</svg>` : '';
     const badges = frameFlags.length && state.badges ? `<div class="badges" aria-hidden="true">${frameFlags.map(x => `<span class="flag ${/attachments/.test(x) ? 'att' : x === L.flag.xfmr ? '' : 'issue'}">${esc(x)}</span>`).join('')}</div>` : '';
     const photo = f && f.img ? `<div class="imgwrap"><img id="dimg" src="${esc(f.img)}" alt="Photo of ${esc(r.id)} taken ${esc(dateLabel(f))}">${overlay}${badges}</div>`
       : `<div class="photo-missing">Photo unavailable.${f && f.url ? ` <a href="${esc(f.url)}" target="_blank" rel="noopener">Open source photo</a>` : ''}</div>`;
