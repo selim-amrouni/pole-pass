@@ -125,7 +125,7 @@ def build_records(poles, out_dir, polygons, marks):
             "votes": {"type": p["votes"]["pole_type"], "lean": p["votes"]["lean_severity"], "xarm": p["votes"]["crossarm_condition"],
                       "veg": p["votes"]["vegetation_contact"], "xfmr": p["votes"]["transformer_present"], "att": p["votes"]["attachment_count"]},
             "n": p["n_observations"], "seq": p["n_sequences"], "nfeat": len(p["feature_ids"]), "features": p["feature_ids"],
-            "flags": p["condition_flags"],
+            "flags": p["condition_flags"], "warn": p.get("warning_flags", []),
             "shown": {"img": shown_img, "date": ms_date(p.get("best_captured_at")), "ts": p.get("best_captured_at"), "year": ms_year(p.get("best_captured_at")),
                       "url": p["best_mapillary_url"], "by": p.get("best_creator"), "px": p.get("best_px_h"), "newest": bool(p.get("best_is_newest"))},
             "latest": {"date": ms_date(p.get("latest_available_at")), "ts": p.get("latest_available_at"), "year": ms_year(p.get("latest_available_at")),
@@ -161,7 +161,8 @@ def validation_blocks(precision):
     section = "<p>No completed validation results are published for this demo.</p>"
     if not precision or not precision.get("flags") or not precision.get("graded_poles"):
         return notice, section, "Experimental · not verified"
-    labels = {"utility_pole": "Is a utility pole", "lean_moderate_or_worse": "Possible lean (moderate or severe)", "lean_severe": "Possible lean (severe)",
+    labels = {"utility_pole": "Is a utility pole", "lean_slight_or_worse": "Slight lean or worse (watch item or issue)",
+              "lean_moderate_or_worse": "Possible lean (moderate or severe)", "lean_severe": "Possible lean (severe)",
               "crossarm_damaged": "Possible crossarm damage", "vegetation_touching": "Possible vegetation contact", "transformer_present": "Transformer visible",
               "attachments_3plus": "3+ estimated attachments", "attachment_count_within_1": "Attachment estimate within 1"}
     trs = []
@@ -186,7 +187,7 @@ def tech_details(summary, coverage, method):
 <li>Records: photos of one feature are combined, then features within {method['radius_m']} m are grouped by single linkage into one record ({summary['records_merged_from_multiple_features']} of {summary['records']} records combine more than one feature). Each field takes the most common value across assessed photos, ties going to the more cautious value; exact vote counts are kept. Photos from one drive are correlated, so agreement across them is not independent verification. {summary['single_frame_records']} records rest on a single photo.</li>
 <li>Photo shown: the newest assessed photo where the pole is at least {method['readable_px']} px tall, otherwise the largest. The record's fields combine all assessed photos, which can include older ones than the photo shown. The latest available photo, assessed or not, is listed separately.</li>
 <li>Positions on photos: a second model pass (same model, one request per assessed photo) was given the crop with a faint labeled grid and the earlier assessment, and asked for the position of the pole top and base, each counted attachment, the transformer, crossarm damage, and vegetation contact. These are approximate model estimates of where something appears in the photo, shown as markers you can hide. They are not measurements and were not verified.</li>
-<li>Possible condition issue: lean moderate or severe, or crossarm damaged, or vegetation touching. Transformers and attachment counts are not condition issues. Attachment count is the number of visible non-electric items the model counted on the pole; it does not identify owners, tenants, or billing status. Coordinates are averaged detection positions, not surveyed.</li>
+<li>Possible condition issue: lean moderate or severe, or crossarm damaged, or vegetation touching. Watch item: slight lean, one tier below an issue; it is common ({summary.get('utility_with_warning_flag', 'many')} of {summary['utility_records']} utility poles) and often within the noise of camera angle. Transformers and attachment counts are not condition issues. Attachment count is the number of visible non-electric items the model counted on the pole; it does not identify owners, tenants, or billing status. Coordinates are averaged detection positions, not surveyed.</li>
 </ul>"""
 
 

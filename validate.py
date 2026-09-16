@@ -38,6 +38,8 @@ FLAGS = {  # name: (field, predicate on model value)
     "vegetation_touching": ("vegetation_contact", lambda v: v == "touching"),
     "transformer_present": ("transformer_present", lambda v: v is True),
     "attachments_3plus": ("attachment_count", lambda v: isinstance(v, int) and v >= 3),
+    # last on purpose: sample() strata take the first matching flag, so the watch tier only claims poles no issue flag claims
+    "lean_slight_or_worse": ("lean_severity", lambda v: v in ("slight", "moderate", "severe")),
 }
 TRUTH_COLS = ["truth_is_utility_pole", "truth_lean", "truth_crossarm", "truth_vegetation",
               "truth_transformer", "truth_attachment_count", "grader_notes"]
@@ -112,6 +114,7 @@ def score(slug):
     def truth_flag(name, r):
         t = {
             "utility_pole": lambda: truthy(r["truth_is_utility_pole"]) if r["truth_is_utility_pole"].strip() else None,
+            "lean_slight_or_worse": lambda: r["truth_lean"].strip() in ("slight", "moderate", "severe") if r["truth_lean"].strip() else None,
             "lean_moderate_or_worse": lambda: r["truth_lean"].strip() in ("moderate", "severe") if r["truth_lean"].strip() else None,
             "lean_severe": lambda: r["truth_lean"].strip() == "severe" if r["truth_lean"].strip() else None,
             "crossarm_damaged": lambda: r["truth_crossarm"].strip() == "damaged" if r["truth_crossarm"].strip() else None,

@@ -75,3 +75,11 @@ records + meta. Counts computed in JS from data via shared predicates, tested wi
 
 Density gate: passed everywhere. Project continues.
 Lesson: Graph API bbox search silently truncates; switched to vector tiles.
+
+## Hook pass (spec approved 2026-09-16, branch feature/hook-demo)
+Plan: ~/.claude/plans/polymorphic-discovering-fountain.md
+- [ ] A. Warning tier: slight lean = watch (amber), moderate/severe + crossarm + vegetation = issue (orange)
+- [ ] B. grade.py local grading page for data/validate/<slug>/sample.csv (blind by default)
+- [ ] C. tilt.py apparent tilt per photo from the detection polygon, calibration.json, per-pole chart over time
+- [ ] D. fetch.py --years: one extra frame per distinct capture year, classify the new frames, "Photos across years" filter + compare
+- [ ] E. Issues filed for coverage-gap layer and GIS-match upload; README/CLAUDE.md; code review; deploy after user review

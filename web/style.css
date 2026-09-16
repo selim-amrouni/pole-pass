@@ -1,7 +1,8 @@
-/* Pole Pass. One sans family, mono for ids and numbers, flat surfaces, one accent, orange only for possible issues. */
+/* Pole Pass. One sans family, mono for ids and numbers, flat surfaces, one accent, orange only for possible issues, amber for watch items. */
 :root {
   --bg: #f4f4f2; --panel: #ffffff; --ink: #1c1c1a; --ink-2: #4b4b47; --ink-3: #6b6b66; --line: #d8d8d3; --line-2: #ebebe7;
   --accent: #1b5e8a; --accent-bg: #e6f0f7; --issue: #c2410c; --issue-bg: #fdf0e8; --issue-line: #efc9b6; --att: #2c6e6b; --att-bg: #e6f2f1; --att-line: #bcd9d7;
+  --warn: #9a6a00; --warn-bg: #fbf3df; --warn-line: #e9d59f;
   --ok: #3f6b2a; --focus: #1b5e8a;
   --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace; --serif: "Fraunces", Georgia, serif;
 }
@@ -27,6 +28,7 @@ a { color: var(--accent); } button { font: inherit; color: inherit; }
 .pill b { font-family: var(--mono); font-weight: 500; font-size: 13.5px; color: var(--ink); }
 .pill.issue { background: var(--issue-bg); border-color: var(--issue-line); } .pill.issue b { color: var(--issue); }
 .pill.att { background: var(--att-bg); border-color: var(--att-line); } .pill.att b { color: var(--att); }
+.pill.warn { background: var(--warn-bg); border-color: var(--warn-line); } .pill.warn b { color: var(--warn); }
 .notice-inline { font-size: 12px; color: var(--issue); text-decoration: none; white-space: nowrap; } .notice-inline:hover { text-decoration: underline; }
 .hdr nav { margin-left: auto; display: flex; gap: 6px; }
 
@@ -36,7 +38,7 @@ a { color: var(--accent); } button { font: inherit; color: inherit; }
 .chip { min-height: 32px; padding: 3px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); cursor: pointer; font-size: 13.5px; }
 .chip .n { color: var(--ink-3); margin-left: 5px; font-family: var(--mono); font-size: 12px; }
 .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; } .chip[aria-pressed="true"] .n { color: #d5d5d0; }
-.chip.issue[aria-pressed="false"] { border-color: var(--issue-line); }
+.chip.issue[aria-pressed="false"] { border-color: var(--issue-line); } .chip.warn[aria-pressed="false"] { border-color: var(--warn-line); }
 .spacer { flex: 1; }
 .sortwrap select { min-height: 32px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font: inherit; font-size: 13px; }
 .menu { position: relative; }
@@ -69,6 +71,7 @@ a { color: var(--accent); } button { font: inherit; color: inherit; }
 .row .pid { font-family: var(--mono); font-size: 12px; }
 .flag { display: inline-block; font-size: 12px; padding: 1px 6px; border-radius: 4px; margin: 0 4px 2px 0; border: 1px solid var(--line); background: var(--bg); }
 .flag.issue { color: var(--issue); background: var(--issue-bg); border-color: var(--issue-line); } .flag.att { color: var(--att); background: var(--att-bg); border-color: var(--att-line); }
+.flag.warn { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-line); }
 .flag.dim { color: var(--ink-3); border-color: transparent; background: none; padding-left: 0; }
 .status { font-size: 12px; color: var(--ink-3); } .status.ok { color: var(--ok); } .status.no { color: var(--issue); }
 .more { padding: 10px 14px; } .empty { padding: 24px 14px; color: var(--ink-2); }
@@ -79,6 +82,7 @@ a { color: var(--accent); } button { font: inherit; color: inherit; }
 .map-tools { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; z-index: 3; }
 .legend { position: absolute; left: 10px; bottom: 26px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 12.5px; line-height: 1.7; z-index: 3; }
 .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ink); margin-right: 7px; vertical-align: -1px; }
+.legend i.warn { border-color: var(--warn); border-width: 2.5px; background: #fff; }
 .legend select { font: inherit; font-size: 12px; margin-left: 4px; }
 
 /* detail */

@@ -15,7 +15,7 @@
     xarm: { none_visible: 'No crossarm visible', intact: 'Crossarm looks intact', damaged: 'Possible crossarm damage', unclear: 'Crossarm: cannot tell' },
     veg: { none: 'No vegetation contact', near: 'Vegetation nearby', touching: 'Possible vegetation contact', unclear: 'Vegetation: cannot tell' },
     mat: { wood: 'Wood', concrete: 'Concrete', steel: 'Steel', fiberglass: 'Fiberglass', unclear: 'Material: cannot tell' },
-    flag: { lean: 'Possible lean', crossarm: 'Possible crossarm damage', vegetation: 'Possible vegetation contact', att3: '3+ estimated attachments', xfmr: 'Transformer visible' },
+    flag: { lean: 'Possible lean', crossarm: 'Possible crossarm damage', vegetation: 'Possible vegetation contact', lean_slight: 'Slight lean', att3: '3+ estimated attachments', xfmr: 'Transformer visible' },
     review: { supported: 'Yes', not_supported: 'No', cannot_tell: "Can't tell" },
     reviewLong: { supported: 'Flag supported', not_supported: 'Flag not supported', cannot_tell: 'Cannot tell from photos' },
   };
@@ -48,6 +48,7 @@
     $('summary').innerHTML = [
       `<span class="pill" title="Model estimate"><b>${s.utility}</b>poles identified</span>`,
       `<span class="pill issue" title="Possible lean, crossarm damage, or vegetation contact"><b>${s.conditionIssues}</b>possible condition issues</span>`,
+      `<span class="pill warn" title="Slight lean in the photos: a watch item, not a condition issue"><b>${s.warnings}</b>to watch</span>`,
       `<span class="pill att" title="Visible non-electric attachments"><b>${s.attachments3}</b>with 3+ attachments</span>`,
       `<span class="pill" title="Dates of the photos shown for the ${s.utility} poles${s.undated ? `; ${s.undated} without a date` : ''}"><b>${esc(dates)}</b>photo dates</span>`,
     ].join('');
@@ -55,7 +56,7 @@
   }
 
   // ---------- filters ----------
-  const CHIPS = [['all', 'All poles', ''], ['lean', 'Possible lean', 'issue'], ['xarm', 'Crossarm damage', 'issue'], ['veg', 'Vegetation contact', 'issue'], ['att3', '3+ attachments', ''], ['xfmr', 'Transformer', '']];
+  const CHIPS = [['all', 'All poles', ''], ['lean', 'Possible lean', 'issue'], ['xarm', 'Crossarm damage', 'issue'], ['veg', 'Vegetation contact', 'issue'], ['lean_slight', 'Slight lean', 'warn'], ['att3', '3+ attachments', ''], ['xfmr', 'Transformer', '']];
   function renderChips() {
     const base = D.records.filter(r => state.other ? !PP.isUtility(r) : PP.isUtility(r));
     $('chips').innerHTML = CHIPS.map(([k, label, cls]) => `<button class="chip ${cls}" data-f="${k}" aria-pressed="${state.flag === k}">${esc(label)}<span class="n">${base.filter(PP.FILTERS[k]).length}</span></button>`).join('');
@@ -83,6 +84,7 @@
   }
   function flagChips(r, dim = true) {
     const out = PP.conditionFlags(r).map(f => `<span class="flag issue">${L.flag[f]}</span>`);
+    PP.warningFlags(r).forEach(f => out.push(`<span class="flag warn">${L.flag[f]}</span>`));
     if (PP.attachments3(r)) out.push(`<span class="flag att">3+ attachments</span>`);
     if (PP.transformerVisible(r)) out.push(`<span class="flag">Transformer</span>`);
     if (!out.length && dim) out.push(PP.conditionUnclear(r) ? `<span class="flag dim">Cannot tell</span>` : `<span class="flag dim">No model flag</span>`);
@@ -153,9 +155,10 @@
     const r = byId[state.selected]; if (!r) return;
     const f = r.frames[state.viewing] || null;
     const util = PP.isUtility(r);
-    const flags = [...PP.conditionFlags(r), PP.attachments3(r) && 'att3', PP.transformerVisible(r) && 'xfmr'].filter(Boolean);
+    const flags = [...PP.conditionFlags(r), ...PP.warningFlags(r), PP.attachments3(r) && 'att3', PP.transformerVisible(r) && 'xfmr'].filter(Boolean);
     const rv = review[r.id] || { flags: {}, note: '' };
-    const frameFlags = f ? [(f.lean === 'moderate' || f.lean === 'severe') && L.flag.lean, f.xarm === 'damaged' && L.flag.crossarm, f.veg === 'touching' && L.flag.vegetation, f.xfmr && L.flag.xfmr, Number.isInteger(f.att) && f.att >= 3 && `${f.att} estimated attachments`].filter(Boolean) : [];
+    const frameFlags = f ? [(f.lean === 'moderate' || f.lean === 'severe') && L.flag.lean, f.xarm === 'damaged' && L.flag.crossarm, f.veg === 'touching' && L.flag.vegetation, f.lean === 'slight' && L.flag.lean_slight, f.xfmr && L.flag.xfmr, Number.isInteger(f.att) && f.att >= 3 && `${f.att} estimated attachments`].filter(Boolean) : [];
+    const flagCls = k => k === 'att3' ? 'att' : k === 'xfmr' ? '' : k === 'lean_slight' ? 'warn' : 'issue';
     const m = f && f.marks;
     const SW = f && f.size ? f.size[0] : 1000, SH = f && f.size ? f.size[1] : 1000, R = Math.max(9, Math.round(Math.min(SW, SH) / 28));
     const X = p => p[0] * SW, Y = p => p[1] * SH, px = p => `${X(p).toFixed(1)},${Y(p).toFixed(1)}`;
@@ -171,7 +174,7 @@
       if (m.xfmr) svg += square(m.xfmr, 'xfmr'); if (m.xarm) svg += tri(m.xarm, 'issue'); if (m.veg) svg += diamond(m.veg, 'issue');
     }
     const overlay = svg ? `<svg class="ov" viewBox="0 0 ${SW} ${SH}" preserveAspectRatio="none" aria-hidden="true">${svg}</svg>` : '';
-    const badges = frameFlags.length && state.badges ? `<div class="badges" aria-hidden="true">${frameFlags.map(x => `<span class="flag ${/attachments/.test(x) ? 'att' : x === L.flag.xfmr ? '' : 'issue'}">${esc(x)}</span>`).join('')}</div>` : '';
+    const badges = frameFlags.length && state.badges ? `<div class="badges" aria-hidden="true">${frameFlags.map(x => `<span class="flag ${/attachments/.test(x) ? 'att' : x === L.flag.xfmr ? '' : x === L.flag.lean_slight ? 'warn' : 'issue'}">${esc(x)}</span>`).join('')}</div>` : '';
     const photo = f && f.img ? `<div class="imgwrap"><img id="dimg" src="${esc(f.img)}" alt="Photo of ${esc(r.id)} taken ${esc(dateLabel(f))}">${overlay}</div>${badges}`
       : `<div class="photo-missing">Photo unavailable.${f && f.url ? ` <a href="${esc(f.url)}" target="_blank" rel="noopener">Open source photo</a>` : ''}</div>`;
     const ovbar = `<div class="ovbar" role="group" aria-label="Photo annotations">
@@ -185,12 +188,12 @@
     const latest = r.latest && r.latest.ts && (!f || r.latest.ts > (f.ts || 0)) ? `<a href="${esc(r.latest.url)}" target="_blank" rel="noopener">Latest available photo ${esc(dateLabel(r.latest))}${r.latest.classified ? '' : ' (not assessed)'} ↗</a>` : '';
     const fieldLine = (label, key) => `<div class="it"><span>${esc(label)}</span>${dots(r, key)}</div>`;
     const flagItems = flags.map(k => {
-      const label = k === 'lean' ? L.lean[r.lean] : k === 'crossarm' ? L.xarm[r.xarm] : k === 'vegetation' ? L.veg[r.veg] : k === 'att3' ? attLabel(r) : xfmrLabel(r);
-      const key = k === 'lean' ? 'lean' : k === 'crossarm' ? 'xarm' : k === 'vegetation' ? 'veg' : k === 'att3' ? 'att' : 'xfmr';
-      return `<div class="it"><span class="flag ${k === 'att3' ? 'att' : k === 'xfmr' ? '' : 'issue'}">${esc(label)}</span>${dots(r, key)}</div>`;
+      const label = k === 'lean' || k === 'lean_slight' ? L.lean[r.lean] : k === 'crossarm' ? L.xarm[r.xarm] : k === 'vegetation' ? L.veg[r.veg] : k === 'att3' ? attLabel(r) : xfmrLabel(r);
+      const key = k === 'lean' || k === 'lean_slight' ? 'lean' : k === 'crossarm' ? 'xarm' : k === 'vegetation' ? 'veg' : k === 'att3' ? 'att' : 'xfmr';
+      return `<div class="it"><span class="flag ${flagCls(k)}">${esc(label)}</span>${dots(r, key)}</div>`;
     }).join('');
     const rest = [
-      !PP.possibleLean(r) && fieldLine(L.lean[r.lean] || r.lean, 'lean'),
+      !PP.possibleLean(r) && !PP.leanWarning(r) && fieldLine(L.lean[r.lean] || r.lean, 'lean'),
       !PP.crossarmDamage(r) && fieldLine(L.xarm[r.xarm] || r.xarm, 'xarm'),
       !PP.vegetationContact(r) && fieldLine(L.veg[r.veg] || r.veg, 'veg'),
       !PP.transformerVisible(r) && fieldLine(xfmrLabel(r), 'xfmr'),
@@ -247,16 +250,18 @@
         style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap contributors' } },
                  layers: [{ id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-saturation': -0.6, 'raster-opacity': 0.9 } }] } });
     } catch (e) { return fail(); }
-    const category = r => !PP.isUtility(r) ? 'other' : state.colorMode === 'attachments' ? (Number.isInteger(r.att) ? (r.att >= 3 ? 'a3' : r.att >= 1 ? 'a1' : 'a0') : 'unclear') : PP.hasConditionIssue(r) ? 'issue' : PP.conditionUnclear(r) ? 'unclear' : 'none';
+    // warning-only poles keep a white fill with an amber ring so the few issue markers stay visible among the many watch items
+    const category = r => !PP.isUtility(r) ? 'other' : state.colorMode === 'attachments' ? (Number.isInteger(r.att) ? (r.att >= 3 ? 'a3' : r.att >= 1 ? 'a1' : 'a0') : 'unclear') : PP.hasConditionIssue(r) ? 'issue' : PP.hasWarning(r) ? 'warn' : PP.conditionUnclear(r) ? 'unclear' : 'none';
     const toFC = rows => ({ type: 'FeatureCollection', features: rows.map(r => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [r.lon, r.lat] }, properties: { id: r.id, cat: category(r) } })) });
-    const COLORS = { issue: '#c2410c', none: '#ffffff', unclear: '#e3e3df', other: '#bcbcb7', a3: '#2c6e6b', a1: '#9ccbc9', a0: '#ffffff' };
+    const COLORS = { issue: '#c2410c', warn: '#ffffff', none: '#ffffff', unclear: '#e3e3df', other: '#bcbcb7', a3: '#2c6e6b', a1: '#9ccbc9', a0: '#ffffff' };
+    const WARN_STROKE = '#9a6a00';
     let ready = false, pendingSel = null, mode = 'main';
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
     map.on('load', () => {
       ready = true;
       map.addSource('poles', { type: 'geojson', data: toFC(filtered) });
       map.addSource('sel', { type: 'geojson', data: toFC([]) });
-      map.addLayer({ id: 'poles', type: 'circle', source: 'poles', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 3.5, 16, 6, 18, 9], 'circle-color': ['match', ['get', 'cat'], ...Object.entries(COLORS).flat(), '#ffffff'], 'circle-stroke-color': '#1c1c1a', 'circle-stroke-width': 1.2, 'circle-opacity': ['match', ['get', 'cat'], 'other', 0.6, 1] } });
+      map.addLayer({ id: 'poles', type: 'circle', source: 'poles', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 3.5, 16, 6, 18, 9], 'circle-color': ['match', ['get', 'cat'], ...Object.entries(COLORS).flat(), '#ffffff'], 'circle-stroke-color': ['match', ['get', 'cat'], 'warn', WARN_STROKE, '#1c1c1a'], 'circle-stroke-width': ['match', ['get', 'cat'], 'warn', 2.2, 1.2], 'circle-opacity': ['match', ['get', 'cat'], 'other', 0.6, 1] } });
       map.addLayer({ id: 'sel', type: 'circle', source: 'sel', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 9, 18, 16], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#1b5e8a', 'circle-stroke-width': 3 } });
       map.on('click', 'poles', e => select(e.features[0].properties.id, { fromMap: true, focus: false }));
       map.on('mouseenter', 'poles', () => map.getCanvas().style.cursor = 'pointer');
@@ -280,7 +285,7 @@
       toMain() { if (mode !== 'mini') return; $('mapwrap').insertBefore(box, $('mapwrap').firstChild); mode = 'main'; map.resize(); },
     };
     function renderLegend() {
-      const cond = `<div><i style="background:#c2410c"></i>Possible condition issue</div><div><i style="background:#fff"></i>No model flag</div><div><i style="background:#e3e3df"></i>Cannot tell from photos</div>`;
+      const cond = `<div><i style="background:#c2410c"></i>Possible condition issue</div><div><i class="warn"></i>Slight lean, watch</div><div><i style="background:#fff"></i>No model flag</div><div><i style="background:#e3e3df"></i>Cannot tell from photos</div>`;
       const att = `<div><i style="background:#2c6e6b"></i>3 or more attachments</div><div><i style="background:#9ccbc9"></i>1 to 2 attachments</div><div><i style="background:#fff"></i>No attachments seen</div><div><i style="background:#e3e3df"></i>Cannot tell</div>`;
       $('legend').innerHTML = `<label>Color by <select id="cmode"><option value="condition"${state.colorMode === 'condition' ? ' selected' : ''}>condition flags</option><option value="attachments"${state.colorMode === 'attachments' ? ' selected' : ''}>attachment estimate</option></select></label>
         ${state.colorMode === 'condition' ? cond : att}${state.other ? '<div><i style="background:#bcbcb7"></i>Other detected object</div>' : ''}<div><i style="border-color:#1b5e8a;border-width:3px;background:none"></i>Selected</div>`;
@@ -290,16 +295,16 @@
   }
 
   // ---------- exports ----------
-  const CSV_COLS = ['id', 'lat', 'lon', 'is_utility_pole', 'pole_type', 'model_flags', 'lean', 'crossarm', 'vegetation', 'transformer', 'attachments_estimate', 'photos_assessed', 'capture_sequences', 'photo_shown_date', 'latest_available_photo_date', 'source_photo_url', 'review_status'];
+  const CSV_COLS = ['id', 'lat', 'lon', 'is_utility_pole', 'pole_type', 'model_flags', 'model_watch', 'lean', 'crossarm', 'vegetation', 'transformer', 'attachments_estimate', 'photos_assessed', 'capture_sequences', 'photo_shown_date', 'latest_available_photo_date', 'source_photo_url', 'review_status'];
   function csvRow(r) {
-    const v = [r.id, r.lat, r.lon, PP.isUtility(r), r.type, PP.conditionFlags(r).join(';'), r.lean, r.xarm, r.veg, r.xfmr, Number.isInteger(r.att) ? r.att : '', r.n, r.seq, r.shown.date || '', r.latest && r.latest.date || '', r.shown.url, reviewStatusLabel(r)];
+    const v = [r.id, r.lat, r.lon, PP.isUtility(r), r.type, PP.conditionFlags(r).join(';'), PP.warningFlags(r).join(';'), r.lean, r.xarm, r.veg, r.xfmr, Number.isInteger(r.att) ? r.att : '', r.n, r.seq, r.shown.date || '', r.latest && r.latest.date || '', r.shown.url, reviewStatusLabel(r)];
     return v.map(x => { const s = String(x ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(',');
   }
   function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
   function exportCsv(rows) { download(`pole-pass-${D.meta.slug}-filtered.csv`, [CSV_COLS.join(','), ...rows.map(csvRow), '', D.meta.attribution].join('\n'), 'text/csv'); }
   function exportGeo(rows) {
     const fc = { type: 'FeatureCollection', license: 'ODbL 1.0', attribution: D.meta.attribution, dataset_version: D.meta.version,
-      features: rows.map(r => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [r.lon, r.lat] }, properties: { id: r.id, is_utility_pole: PP.isUtility(r), pole_type: r.type, model_flags: PP.conditionFlags(r), lean: r.lean, crossarm: r.xarm, vegetation: r.veg, transformer: r.xfmr, attachments_estimate: r.att, photos_assessed: r.n, photo_shown_date: r.shown.date, source_photo_url: r.shown.url } })) };
+      features: rows.map(r => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [r.lon, r.lat] }, properties: { id: r.id, is_utility_pole: PP.isUtility(r), pole_type: r.type, model_flags: PP.conditionFlags(r), model_watch: PP.warningFlags(r), lean: r.lean, crossarm: r.xarm, vegetation: r.veg, transformer: r.xfmr, attachments_estimate: r.att, photos_assessed: r.n, photo_shown_date: r.shown.date, source_photo_url: r.shown.url } })) };
     download(`pole-pass-${D.meta.slug}-filtered.geojson`, JSON.stringify(fc), 'application/geo+json');
   }
   function exportReview() { download(`pole-pass-${D.meta.slug}-review.json`, JSON.stringify({ dataset_version: D.meta.version, exported: new Date().toISOString(), scope: 'Local decisions from one browser. Not shared, not independently validated.', decisions: review }, null, 2), 'application/json'); }

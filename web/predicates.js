@@ -13,12 +13,17 @@
   // "Possible condition issue": any of the three condition flags. Attachments and transformers are not condition issues.
   const conditionFlags = r => [possibleLean(r) && 'lean', crossarmDamage(r) && 'crossarm', vegetationContact(r) && 'vegetation'].filter(Boolean);
   const hasConditionIssue = r => conditionFlags(r).length > 0;
+  // "Watch item": one tier below a condition issue. Slight lean only, for now. Mirrors warning_flags() in dedupe.py.
+  const leanWarning = r => r.lean === 'slight';
+  const warningFlags = r => [leanWarning(r) && 'lean_slight'].filter(Boolean);
+  const hasWarning = r => warningFlags(r).length > 0;
   // All three condition fields unreadable: the model could not assess condition from any photo.
   const conditionUnclear = r => r.lean === 'unclear' && r.xarm === 'unclear' && r.veg === 'unclear';
 
   const FILTERS = {
     all: r => true,
     lean: possibleLean,
+    lean_slight: leanWarning,
     xarm: crossarmDamage,
     veg: vegetationContact,
     att3: attachments3,
@@ -45,6 +50,7 @@
       utility: util.length,
       other: records.length - util.length,
       conditionIssues: util.filter(hasConditionIssue).length,
+      warnings: util.filter(hasWarning).length,
       attachments3: util.filter(attachments3).length,
       transformer: util.filter(transformerVisible).length,
       lean: util.filter(possibleLean).length,
@@ -60,9 +66,9 @@
     date_desc: (a, b) => (b.shown.ts || 0) - (a.shown.ts || 0),
     date_asc: (a, b) => (a.shown.ts || 0) - (b.shown.ts || 0),
     att_desc: (a, b) => (b.att ?? -1) - (a.att ?? -1) || (b.shown.ts || 0) - (a.shown.ts || 0),
-    flags_desc: (a, b) => conditionFlags(b).length - conditionFlags(a).length || (b.shown.ts || 0) - (a.shown.ts || 0),
+    flags_desc: (a, b) => conditionFlags(b).length - conditionFlags(a).length || warningFlags(b).length - warningFlags(a).length || (b.shown.ts || 0) - (a.shown.ts || 0),
   };
 
   return { isUtility, possibleLean, crossarmDamage, vegetationContact, transformerVisible, attachments3,
-           conditionFlags, hasConditionIssue, conditionUnclear, FILTERS, applyFilters, summary, SORTS };
+           conditionFlags, hasConditionIssue, leanWarning, warningFlags, hasWarning, conditionUnclear, FILTERS, applyFilters, summary, SORTS };
 });

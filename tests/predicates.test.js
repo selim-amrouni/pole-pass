@@ -16,6 +16,17 @@ test('condition issue is lean moderate/severe, crossarm damaged, or vegetation t
   assert.equal(PP.hasConditionIssue(rec({ att: 5, xfmr: true })), false, 'attachments and transformers are not condition issues');
 });
 
+test('slight lean is a watch item, one tier below a condition issue', () => {
+  assert.deepEqual(PP.warningFlags(rec({ lean: 'slight' })), ['lean_slight']);
+  assert.equal(PP.hasConditionIssue(rec({ lean: 'slight' })), false);
+  assert.deepEqual(PP.warningFlags(rec({ lean: 'moderate' })), [], 'moderate is an issue, not a watch item');
+  assert.deepEqual(PP.warningFlags(rec({ lean: 'none' })), []);
+  assert.deepEqual(PP.applyFilters([rec({ id: 'a', lean: 'slight' }), rec({ id: 'b', lean: 'severe' })], { flag: 'lean_slight' }).map(r => r.id), ['a']);
+  assert.equal(PP.summary([rec({ lean: 'slight' }), rec({ lean: 'slight', util: false }), rec({ lean: 'moderate' })]).warnings, 1);
+  const sorted = [rec({ id: 'w', lean: 'slight' }), rec({ id: 'n' }), rec({ id: 'i', lean: 'severe' })].sort(PP.SORTS.flags_desc).map(r => r.id);
+  assert.deepEqual(sorted, ['i', 'w', 'n'], 'issues first, then watch items');
+});
+
 test('3+ attachments requires a utility pole and an integer count', () => {
   assert.equal(PP.attachments3(rec({ att: 3 })), true);
   assert.equal(PP.attachments3(rec({ att: 2 })), false);
@@ -53,6 +64,9 @@ test('published data.js flags match the shared predicate (dedupe.py and predicat
   let mismatch = 0;
   for (const r of D.records) if (JSON.stringify(PP.conditionFlags(r)) !== JSON.stringify(r.flags)) mismatch++;
   assert.equal(mismatch, 0);
+  let warnMismatch = 0;
+  for (const r of D.records) if (JSON.stringify(PP.warningFlags(r)) !== JSON.stringify(r.warn)) warnMismatch++;
+  assert.equal(warnMismatch, 0, 'warning_flags() in dedupe.py and warningFlags() agree');
   const s = PP.summary(D.records);
   assert.equal(s.records, D.records.length);
   assert.equal(s.utility + s.other, s.records);
