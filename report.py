@@ -36,6 +36,7 @@ OUT = ROOT / "out"
 CROP_PX, FRAME_PX = 640, 560
 ATTRIBUTION = ("Imagery and detections © Mapillary contributors, CC BY-SA 4.0. Derived data ODbL. "
                "Basemap © OpenStreetMap contributors.")
+DEFAULT_CONTACT = "mailto:selim.amrouni@gmail.com"
 DEFAULT_EXAMPLE = {"greenpoint-brooklyn-new-york": "gree-00062"}  # chosen after viewing the photo: whole pole, clear, unremarkable
 
 
@@ -60,14 +61,34 @@ def resized(src, dst, px, q=80):
     return True
 
 
-def build_records(poles, out_dir):
+def load_polygons(slug):
+    """detection_id -> polygon normalized to the crop box (0..1), from fetch polygon + crop meta."""
+    obs_path = DATA / "fetch" / slug / "observations.jsonl"
+    out = {}
+    if not obs_path.exists():
+        return out
+    for line in obs_path.open():
+        o = json.loads(line)
+        meta = DATA / "crops" / f"{o['detection_id']}.json"
+        if not meta.exists() or not o.get("polygon_norm"):
+            continue
+        m = json.loads(meta.read_text())
+        W, H = m["source_w"], m["source_h"]
+        x0, y0, x1, y1 = m["box"]
+        cw, ch = (x1 - x0) or 1, (y1 - y0) or 1
+        out[o["detection_id"]] = [[round((x * W - x0) / cw, 4), round((y * H - y0) / ch, 4)] for x, y in o["polygon_norm"][0]]
+    return out
+
+
+def build_records(poles, out_dir, polygons):
     rows = []
     for p in poles:
         shown_img = f"crops/{p['pole_id']}.jpg" if resized(p.get("best_crop"), out_dir / "crops" / f"{p['pole_id']}.jpg", CROP_PX) else None
         frames = []
         for f in p["frames"]:
             img = f"frames/{f['image_id']}.jpg" if resized(f.get("crop"), out_dir / "frames" / f"{f['image_id']}.jpg", FRAME_PX, 78) else None
-            frames.append({"id": f["image_id"], "date": ms_date(f.get("captured_at")), "ts": f.get("captured_at"), "year": ms_year(f.get("captured_at")),
+            det = Path(f["crop"]).stem if f.get("crop") else None
+            frames.append({"poly": polygons.get(det),"id": f["image_id"], "date": ms_date(f.get("captured_at")), "ts": f.get("captured_at"), "year": ms_year(f.get("captured_at")),
                            "url": f["url"], "px": f.get("px_h"), "pano": bool(f.get("is_pano")), "seq": f.get("sequence"), "img": img, "by": f.get("creator"),
                            "type": f["pole_type"], "lean": f["lean"], "xarm": f["crossarm"], "veg": f["vegetation"], "xfmr": bool(f["transformer"]),
                            "att": f["attachments"], "conf": f.get("confidence"), "note": f.get("note") or "", "shown": bool(f.get("shown"))})
@@ -155,7 +176,7 @@ def render(template, ctx):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--town", required=True)
-    ap.add_argument("--contact", default="", help="href for the contact button; omitted from the page when empty")
+    ap.add_argument("--contact", default=DEFAULT_CONTACT, help="href for the contact button; pass an empty string to omit it")
     ap.add_argument("--example", help="record id opened on first load (desktop); default per territory in DEFAULT_EXAMPLE")
     args = ap.parse_args()
     slug = slugify(args.town)
@@ -170,7 +191,7 @@ def main():
     out_dir = OUT / slug
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    rows = build_records(poles, out_dir)
+    rows = build_records(poles, out_dir, load_polygons(slug))
     version = hashlib.sha1(json.dumps([{k: v for k, v in r.items() if k not in ("shown", "frames")} for r in rows], sort_keys=True).encode()).hexdigest()[:8]
     example = args.example or DEFAULT_EXAMPLE.get(slug)
     if example and example not in {r["id"] for r in rows}:
@@ -190,7 +211,7 @@ def main():
         shutil.copy(WEB / f, out_dir / f)
 
     notice, vsection = validation_blocks(precision)
-    contact_nav = f'<a class="btn primary" href="{args.contact}">Contact Selim</a>' if args.contact else ""
+    contact_nav = f'<a class="btn primary big" href="{args.contact}">Contact Selim</a>' if args.contact else ""
     contact_section = ("<h2>Try another area</h2><p>Send me an area you know. I'll check the available imagery and see whether a similar review would be useful.</p>"
                        f"<p><a class=\"btn primary\" href=\"{args.contact}\">Contact Selim</a></p>") if args.contact else ""
     html = render((WEB / "index.html").read_text(), {

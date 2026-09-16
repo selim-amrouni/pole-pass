@@ -23,6 +23,7 @@ button { font: inherit; color: inherit; }
 .hdr nav { margin-left: auto; display: flex; gap: 6px; }
 .btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); cursor: pointer; text-decoration: none; color: var(--ink); }
 .btn:hover { border-color: var(--ink-3); } .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.big { min-height: 42px; padding: 8px 18px; font-size: 16px; font-weight: 500; }
 .btn.sm { min-height: 30px; padding: 3px 9px; font-size: 13px; }
 .btn[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
 
@@ -55,13 +56,14 @@ details.adv { font-size: 13px; } details.adv summary { cursor: pointer; color: v
 .menu-list button:hover, .menu-list a:hover { background: var(--bg); } .menu-list .h { font-size: 12px; color: var(--ink-3); padding: 6px 10px 2px; }
 
 /* workspace */
-.ws { display: grid; grid-template-columns: 360px 1fr; height: 70vh; min-height: 520px; } /* height set from the viewport in app.js */
-.ws.has-detail { grid-template-columns: 360px 1fr 440px; }
+.ws { display: grid; grid-template-columns: 340px 1fr; height: 70vh; min-height: 520px; } /* height set from the viewport in app.js */
+.ws > * { min-height: 0; min-width: 0; } /* grid children must not grow to their content */
+.ws.has-detail { grid-template-columns: 340px minmax(260px, 1fr) minmax(640px, 1.7fr); }
 .pane { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
 .pane-h { padding: 10px 14px 6px; border-bottom: 1px solid var(--line-2); }
 .pane-h h2 { font-size: 15px; margin: 0; } .pane-h p { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); }
 .count { font-size: 13px; color: var(--ink-2); padding: 6px 14px; border-bottom: 1px solid var(--line-2); display: flex; align-items: center; gap: 8px; }
-.list { overflow: auto; flex: 1; }
+.list { overflow: auto; flex: 1; min-height: 0; }
 .row { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--line-2); background: none; text-align: left; cursor: pointer; }
 .row:hover { background: var(--bg); } .row[aria-selected="true"] { background: var(--accent-bg); box-shadow: inset 3px 0 0 var(--accent); }
 .row img { width: 56px; height: 56px; object-fit: cover; border-radius: 4px; background: #e9e9e5; }
@@ -83,12 +85,23 @@ details.adv { font-size: 13px; } details.adv summary { cursor: pointer; color: v
 .legend select { font: inherit; font-size: 12px; margin-left: 4px; }
 
 /* detail */
-.detail { background: var(--panel); border-left: 1px solid var(--line); overflow: auto; min-width: 0; }
-.detail-h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); position: sticky; top: 0; background: var(--panel); z-index: 2; }
+.detail { background: var(--panel); border-left: 1px solid var(--line); min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.dbody { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(300px, 1fr); flex: 1; min-height: 0; }
+.dphoto { overflow: auto; min-height: 0; border-right: 1px solid var(--line-2); background: var(--bg); }
+.dtext { overflow: auto; min-height: 0; }
+.detail-h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); background: var(--panel); flex: none; }
 .detail-h .id { font-family: var(--mono); font-size: 13px; }
 .detail-h .nav { margin-left: auto; display: flex; gap: 4px; }
-.photo { position: relative; background: #111; }
-.photo img { display: block; width: 100%; max-height: 62vh; object-fit: contain; }
+.photo { position: relative; background: #111; text-align: center; line-height: 0; }
+.imgwrap { position: relative; display: inline-block; max-width: 100%; }
+.imgwrap img { display: block; max-width: 100%; max-height: 58vh; width: auto; height: auto; }
+.imgwrap svg.ov { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.imgwrap svg.ov polygon { fill: none; vector-effect: non-scaling-stroke; }
+.imgwrap svg.ov polygon.halo { stroke: rgba(255,255,255,.95); stroke-width: 5px; }
+.imgwrap svg.ov polygon.line { stroke: #1b5e8a; stroke-width: 2px; fill: rgba(27,94,138,.08); }
+.badges { position: absolute; left: 8px; top: 8px; display: flex; flex-wrap: wrap; gap: 4px; line-height: 1.4; text-align: left; max-width: calc(100% - 16px); }
+.badges .flag { background: rgba(255,255,255,.92); }
+.ovtoggle { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); padding: 6px 12px; }
 .photo .cap { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 6px 12px; font-size: 13px; background: var(--bg); border-bottom: 1px solid var(--line); }
 .photo .cap a { white-space: nowrap; }
 .photo-missing { padding: 28px 12px; text-align: center; color: #ddd; }
@@ -128,9 +141,13 @@ dialog.lb .bar a { color: #9cd; } dialog.lb .bar button { margin-left: auto; }
 /* tabs (mobile) */
 .tabs { display: none; }
 
-@media (max-width: 1199px) {
-  .ws.has-detail { grid-template-columns: 1fr 440px; }
+@media (max-width: 1299px) {
+  .ws.has-detail { grid-template-columns: minmax(280px, 1fr) minmax(640px, 2fr); }
   .ws.has-detail .pane { display: none; }
+}
+@media (max-width: 1099px) {
+  .ws.has-detail { grid-template-columns: 1fr; }
+  .ws.has-detail .mapwrap { display: none; }
 }
 @media (max-width: 899px) {
   .ws, .ws.has-detail { display: block; height: auto; }
@@ -141,7 +158,8 @@ dialog.lb .bar a { color: #9cd; } dialog.lb .bar button { margin-left: auto; }
   .detail-h .nav { margin-left: 0; width: 100%; justify-content: flex-end; }
   .pane { border-right: 0; height: auto; } .list { overflow: visible; }
   .mapwrap { height: 60vh; } .ws[data-tab="list"] .mapwrap { display: none; } .ws[data-tab="map"] .pane { display: none; }
-  .detail { position: fixed; inset: 0; z-index: 30; border: 0; }
+  .detail { position: fixed; inset: 0; z-index: 30; border: 0; overflow: auto; }
+  .dbody { display: block; } .dphoto, .dtext { overflow: visible; border-right: 0; }
   .ws:not(.has-detail) .detail { display: none; }
   .row { grid-template-columns: 64px 1fr; } .row .r { grid-column: 2; text-align: left; }
   .intro h1 { font-size: 19px; } .tile { min-width: 0; flex: 1 1 45%; }
