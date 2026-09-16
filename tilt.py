@@ -32,7 +32,7 @@ MIN_ROWS = 5       # scanlines that must cross the polygon
 
 
 def apparent_tilt(polygon_norm, width, height):
-    """Signed degrees from vertical for the largest ring, or None if the outline is too small."""
+    """Signed degrees from vertical for the ring with the most vertices (one ring per detection in practice), or None if the outline is too small."""
     if not polygon_norm or not width or not height:
         return None
     ring = max(polygon_norm, key=len)

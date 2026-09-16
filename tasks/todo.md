@@ -83,7 +83,7 @@ Plan: ~/.claude/plans/polymorphic-discovering-fountain.md
 - [x] C. tilt.py apparent tilt per photo from the detection polygon, calibration.json, per-pole chart over time
 - [x] D. "Photographed in more than one year" filter + cross-year compare (23 utility poles). fetch --years dropped: verified 0 of 1725 features have a detection year their top-3 frames miss, so no new fetch or classify was needed
 - [x] E. Issues #18 (coverage-gap layer) and #19 (GIS match) filed; README/CLAUDE.md updated
-- [ ] Code-reviewer findings addressed
+- [x] Code-reviewer findings addressed (static exports, strict summary key, flat calibration + pano dots, y-range, keyboard dots, grade.py value/origin/json guards, python tests)
 - [ ] User: grade the sample with grade.py, then validate.py --score, report.py, deploy.sh
 - [ ] User reviews the local page, then PR feature/hook-demo -> main and ./deploy.sh
 

@@ -47,7 +47,7 @@ to its source photo.
    lives in the template; counts are computed in the browser from data via
    `web/predicates.js`, which mirrors `condition_flags()` and
    `warning_flags()` in dedupe.py. Two tiers: issue (orange) and watch (amber,
-   slight lean only). Tests: `node --test tests/*.test.js`.
+   slight lean only). Tests: `node --test tests/*.test.js` and `uv run python3 -m unittest discover -s tests`.
 
 Stretch: diff against OpenStreetMap `power=pole` in the same bbox via Overpass
 and report how many detected assets are absent from OSM.

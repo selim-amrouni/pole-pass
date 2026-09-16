@@ -59,6 +59,7 @@
   const CHIPS = [['all', 'All poles', ''], ['lean', 'Possible lean', 'issue'], ['xarm', 'Crossarm damage', 'issue'], ['veg', 'Vegetation contact', 'issue'], ['lean_slight', 'Slight lean', 'warn'], ['att3', '3+ attachments', ''], ['xfmr', 'Transformer', '']];
   function renderChips() {
     const base = D.records.filter(r => state.other ? !PP.isUtility(r) : PP.isUtility(r));
+    $('years-n').textContent = String(base.filter(PP.spansYears).length);
     $('chips').innerHTML = CHIPS.map(([k, label, cls]) => `<button class="chip ${cls}" data-f="${k}" aria-pressed="${state.flag === k}">${esc(label)}<span class="n">${base.filter(PP.FILTERS[k]).length}</span></button>`).join('');
   }
   function readYearInputs() {
@@ -235,15 +236,15 @@
   }
   // Apparent tilt per photo (from the Mapillary outline) against photo date. A property of each photo, not a measured lean.
   function tiltHtml(r) {
-    const pts = r.frames.map((x, i) => ({ i, ts: x.ts, t: Math.abs(x.tilt), lean: x.lean })).filter(p => Number.isFinite(p.t) && p.ts);
+    const pts = r.frames.map((x, i) => ({ i, ts: x.ts, t: Math.abs(x.tilt), lean: x.lean, pano: !!x.pano })).filter(p => Number.isFinite(p.t) && p.ts);
     if (!pts.length) return '';
     const cal = D.meta.tilt;
-    const noise = cal ? `Photos the model called straight read up to ${cal.none_p90}° (90th percentile, ${cal.none_n} photos).` : '';
+    const noise = cal ? `${cal.kind === 'flat' ? 'Flat photos' : 'Photos'} the model called straight read up to ${cal.none_p90}° (90th percentile, ${cal.none_n} photos); 360° photos read noisier.` : '';
     const hint = `<p class="hint">Angle of the Mapillary outline from vertical in each photo. Camera roll and perspective add noise. ${noise} Not a measured lean.</p>`;
     if (pts.length === 1) return `<div class="sec tilt"><h3>Apparent tilt in photo</h3><div class="it"><span><b class="mono">${pts[0].t.toFixed(1)}°</b> from vertical, photo from ${esc(dateLabel(r.frames[pts[0].i]))}</span></div>${hint}</div>`;
     const W = 360, H = 120, L = 30, R = 10, T = 10, B = 24;
     const ts0 = Math.min(...pts.map(p => p.ts)), ts1 = Math.max(...pts.map(p => p.ts));
-    const ymax = Math.max(15, Math.ceil(Math.max(...pts.map(p => p.t)) / 5) * 5 + 5);
+    const ymax = Math.max(15, cal ? cal.none_p90 + 5 : 0, Math.ceil(Math.max(...pts.map(p => p.t)) / 5) * 5 + 5);
     const X = ts => ts1 === ts0 ? L + (W - L - R) / 2 : L + (ts - ts0) / (ts1 - ts0) * (W - L - R);
     const Y = t => T + (1 - t / ymax) * (H - T - B);
     const y0 = new Date(ts0).getUTCFullYear(), y1 = new Date(ts1).getUTCFullYear();
@@ -255,10 +256,10 @@
       : years.filter((y, k) => k % step === 0 || y === y1).map(y => { const ts = Math.min(ts1, Math.max(ts0, Date.UTC(y, 0, 1))); return `<text x="${X(ts).toFixed(1)}" y="${H - 6}" text-anchor="${y === y0 ? 'start' : y === y1 ? 'end' : 'middle'}">${y}</text>`; }).join('');
     const yt = [0, 10, 20, 30].filter(v => v <= ymax).map(v => `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 4}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end">${v}°</text>`).join('');
     const band = cal ? `<rect class="band" x="${L}" y="${Y(cal.none_p90).toFixed(1)}" width="${W - L - R}" height="${(Y(0) - Y(cal.none_p90)).toFixed(1)}"/>` : '';
-    const dots = pts.sort((a, b) => a.ts - b.ts).map(p => `<circle class="pt ${p.lean === 'moderate' || p.lean === 'severe' ? 'issue' : p.lean === 'slight' ? 'warn' : ''}${p.i === state.viewing ? ' cur' : ''}" data-i="${p.i}" cx="${X(p.ts).toFixed(1)}" cy="${Y(p.t).toFixed(1)}" r="5"><title>${esc(dateLabel(r.frames[p.i]))}: ${p.t.toFixed(1)}° in photo</title></circle>`).join('');
+    const dots = pts.sort((a, b) => a.ts - b.ts).map(p => `<circle class="pt ${p.lean === 'moderate' || p.lean === 'severe' ? 'issue' : p.lean === 'slight' ? 'warn' : ''}${p.pano ? ' pano' : ''}${p.i === state.viewing ? ' cur' : ''}" data-i="${p.i}" tabindex="0" role="button" aria-label="View photo from ${esc(dateLabel(r.frames[p.i]))}, ${p.t.toFixed(1)} degrees in photo" cx="${X(p.ts).toFixed(1)}" cy="${Y(p.t).toFixed(1)}" r="5"><title>${esc(dateLabel(r.frames[p.i]))}: ${p.t.toFixed(1)}° in photo</title></circle>`).join('');
     return `<div class="sec tilt"><h3>Apparent tilt in photos · ${pts.length} of ${r.n}</h3>
       <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Apparent tilt per photo over time">${band}${yt}${xt}${dots}</svg>
-      <p class="hint">${cal ? `Shaded: range of photos the model called straight. ` : ''}Dot color follows that photo's lean call. Click a dot to view the photo.</p>${hint}</div>`;
+      <p class="hint">${cal ? `Shaded: range of photos the model called straight. ` : ''}Dot color follows that photo's lean call; dashed dots are 360° photos. Click a dot to view the photo.</p>${hint}</div>`;
   }
   function compareHtml(r) {
     // pair with the photo farthest in time that has an image: earliest against latest for records photographed across years
@@ -353,7 +354,6 @@
     $('reset').addEventListener('click', () => { resetFilters(); toggleMenu('dates-btn', 'dates-menu', false); });
     $('other').addEventListener('change', e => { state.other = e.target.checked; state.flag = 'all'; refresh(); if (mapApi) mapApi.recolor(); });
     $('years').addEventListener('change', e => { state.years = e.target.checked; refresh(); });
-    $('years-n').textContent = PP.summary(D.records).spansYears;
     $('dates-btn').addEventListener('click', () => { toggleMenu('dates-btn', 'dates-menu'); toggleMenu('export-btn', 'export-menu', false); });
     $('export-btn').addEventListener('click', () => { toggleMenu('export-btn', 'export-menu'); toggleMenu('dates-btn', 'dates-menu', false); });
     document.addEventListener('click', e => { if (!e.target.closest('.menu')) { toggleMenu('export-btn', 'export-menu', false); toggleMenu('dates-btn', 'dates-menu', false); } });
@@ -381,6 +381,10 @@
       if (k) { state[k] = !state[k]; renderDetail(); $(t.id).focus(); return; }
       if (t.dataset.i != null) { state.viewing = +t.dataset.i; state.compare = false; renderDetail(); $('detail').querySelector(`[data-i="${state.viewing}"]`).focus(); return; }
       if (t.dataset.rf) { const rv = review[state.selected] || { flags: {}, note: '' }; rv.flags[t.dataset.rf] = rv.flags[t.dataset.rf] === t.dataset.rv ? null : t.dataset.rv; review[state.selected] = rv; saveReview(review); renderDetail(); refreshRowStatus(); $('detail').querySelector(`[data-rf="${t.dataset.rf}"][data-rv="${t.dataset.rv}"]`).focus(); }
+    });
+    $('detail').addEventListener('keydown', e => {
+      const pt = e.target.closest && e.target.closest('.tilt .pt'); if (!pt || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault(); state.viewing = +pt.dataset.i; state.compare = false; renderDetail(); const n = $('detail').querySelector(`.tilt .pt[data-i="${state.viewing}"]`); if (n && n.focus) n.focus();
     });
     $('detail').addEventListener('input', e => { if (e.target.id === 'rnote') { const rv = review[state.selected] || { flags: {}, note: '' }; rv.note = e.target.value; review[state.selected] = rv; saveReview(review); } });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && state.selected && !$('lb').open) close(); });

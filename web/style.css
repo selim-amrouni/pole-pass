@@ -135,7 +135,7 @@ a { color: var(--accent); } button { font: inherit; color: inherit; }
 .tilt .band { fill: var(--line-2); } .tilt .grid { stroke: var(--line); stroke-width: 1; }
 .tilt text { font-family: var(--mono); font-size: 9.5px; fill: var(--ink-3); }
 .tilt .pt { fill: #fff; stroke: var(--ink); stroke-width: 1.5; cursor: pointer; } .tilt .pt.warn { fill: var(--warn-bg); stroke: var(--warn); } .tilt .pt.issue { fill: var(--issue-bg); stroke: var(--issue); }
-.tilt .pt.cur { stroke: var(--accent); stroke-width: 3; }
+.tilt .pt.cur { stroke: var(--accent); stroke-width: 3; } .tilt .pt.pano { stroke-dasharray: 2.5 1.5; } .tilt .pt:focus-visible { outline: none; stroke: var(--focus); stroke-width: 3; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; font-size: 12.5px; }
 .seg button { border: 0; background: var(--panel); padding: 6px 10px; cursor: pointer; border-left: 1px solid var(--line); min-height: 32px; }
 .seg button:first-child { border-left: 0; } .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; } .seg button[aria-pressed="true"].yes { background: var(--ok); }

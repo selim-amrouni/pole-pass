@@ -25,6 +25,20 @@ from coverage import DATA, ROOT, slugify
 from validate import TRUTH_COLS, TRUTH_HELP
 
 CROPS = DATA / "crops"
+ALLOWED = {c: set(h.split("/")) for c, h in TRUTH_HELP.items() if "/" in h}  # y/n and the enumerations from validate.py
+
+
+def valid_value(col, v):
+    """Only values validate.score() understands get written; blank means not graded."""
+    if not isinstance(v, str):
+        return False
+    if col == "grader_notes":
+        return len(v) <= 2000
+    if v == "":
+        return True
+    if col == "truth_attachment_count":
+        return v.isdigit()
+    return v in ALLOWED[col]
 
 PAGE = r"""<!doctype html><meta charset="utf-8"><title>Grade sample</title>
 <style>
@@ -117,10 +131,10 @@ document.addEventListener('click', e => {
 $('notes').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => set('grader_notes', $('notes').value, false), 500); });
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'TEXTAREA') return;
-  if (e.key === 'Enter' || e.key === 'ArrowRight') return go(1);
+  if (e.key === 'Enter' || e.key === 'ArrowRight') { e.preventDefault(); return go(1); }
   if (e.key === 'Backspace' || e.key === 'ArrowLeft') return go(-1);
   const r = rows[i];
-  if (e.key === '[' || e.key === ']') { const n = Math.max(0, Math.min(8, (parseInt(r.truth_attachment_count, 10) || 0) + (e.key === ']' ? 1 : -1))); return set('truth_attachment_count', String(n)); }
+  if (e.key === '[' || e.key === ']') { const n = Math.max(0, Math.min(8, (parseInt(r.truth_attachment_count, 10) || 0) + (e.key === ']' ? 1 : -1))); return set('truth_attachment_count', String(n), false); }
   for (const col in OPTS) for (const [v, , key] of OPTS[col]) if (key && key === e.key) return set(col, v);
 });
 load();
@@ -130,7 +144,9 @@ load();
 def load_sample(path):
     with path.open(newline="") as fh:
         reader = csv.reader(fh)
-        header = next(reader)
+        header = next(reader, None)
+        if not header:
+            raise ValueError(f"{path} is empty")
         rows = [dict(zip(header, r)) for r in reader]
     return header, rows
 
@@ -153,11 +169,12 @@ def main():
     args = ap.parse_args()
     slug = slugify(args.town)
     sample_path = DATA / "validate" / slug / "sample.csv"
-    if not sample_path.exists():
+    if not sample_path.exists() or not sample_path.read_text().strip():
         sys.exit(f"no sample at {sample_path}, run validate.py --sample first")
     poles_path = DATA / "poles" / slug / "poles.jsonl"
     poles = {p["pole_id"]: p for p in (json.loads(l) for l in poles_path.open())} if poles_path.exists() else {}
     lock = threading.Lock()
+    allowed_origins = {f"http://127.0.0.1:{args.port}", f"http://localhost:{args.port}"}
 
     def frames_for(row):
         p = poles.get(row["pole_id"])
@@ -203,10 +220,20 @@ def main():
         def do_POST(self):
             if urlparse(self.path).path != "/save":
                 return self.send(404, b"not found", "text/plain")
-            body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0)) or 0) or b"{}")
-            truth = body.get("truth") or {}
+            # a page on another site can POST here without a preflight; only this page may write grades
+            origin = self.headers.get("Origin")
+            if origin not in allowed_origins and not (origin is None and self.headers.get("Sec-Fetch-Site") == "same-origin"):
+                return self.send(403, b"cross-origin write refused", "text/plain")
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0)) or 0) or b"{}")
+            except ValueError:
+                return self.send(400, b"bad json", "text/plain")
+            truth = (body.get("truth") if isinstance(body, dict) else None) or {}
             if set(truth) - set(TRUTH_COLS):
                 return self.send(400, b"unknown column", "text/plain")
+            bad = [c for c, v in truth.items() if not valid_value(c, v)]
+            if bad:
+                return self.send(400, f"bad value for {', '.join(bad)}".encode(), "text/plain")
             with lock:
                 header, rows = load_sample(sample_path)
                 hit = [r for r in rows if r["pole_id"] == body.get("pole_id")]

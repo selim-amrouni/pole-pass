@@ -138,19 +138,19 @@ def build_records(poles, out_dir, polygons, marks):
 def write_all_exports(rows, out_dir):
     fc = {"type": "FeatureCollection", "license": "ODbL 1.0", "attribution": ATTRIBUTION,
           "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [r["lon"], r["lat"]]},
-                        "properties": {"id": r["id"], "is_utility_pole": r["util"], "pole_type": r["type"], "model_flags": r["flags"],
+                        "properties": {"id": r["id"], "is_utility_pole": r["util"], "pole_type": r["type"], "model_flags": r["flags"], "model_watch": r["warn"],
                                        "lean": r["lean"], "crossarm": r["xarm"], "vegetation": r["veg"], "transformer": r["xfmr"],
                                        "attachments_estimate": r["att"], "photos_assessed": r["n"], "capture_sequences": r["seq"],
                                        "photo_shown_date": r["shown"]["date"], "latest_available_photo_date": r["latest"]["date"],
                                        "source_photo_url": r["shown"]["url"]}} for r in rows]}
     (out_dir / "poles.geojson").write_text(json.dumps(fc))
-    cols = ["id", "lat", "lon", "is_utility_pole", "pole_type", "model_flags", "lean", "crossarm", "vegetation", "transformer",
+    cols = ["id", "lat", "lon", "is_utility_pole", "pole_type", "model_flags", "model_watch", "lean", "crossarm", "vegetation", "transformer",
             "attachments_estimate", "photos_assessed", "capture_sequences", "photo_shown_date", "latest_available_photo_date", "source_photo_url"]
     with (out_dir / "poles.csv").open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(cols)
         for r in rows:
-            w.writerow([r["id"], r["lat"], r["lon"], r["util"], r["type"], ";".join(r["flags"]), r["lean"], r["xarm"], r["veg"], r["xfmr"],
+            w.writerow([r["id"], r["lat"], r["lon"], r["util"], r["type"], ";".join(r["flags"]), ";".join(r["warn"]), r["lean"], r["xarm"], r["veg"], r["xfmr"],
                         "" if r["att"] is None else r["att"], r["n"], r["seq"], r["shown"]["date"] or "", r["latest"]["date"] or "", r["shown"]["url"]])
         w.writerow([])
         w.writerow([ATTRIBUTION])
@@ -187,8 +187,8 @@ def tech_details(summary, coverage, method, tilt_meta=None):
 <li>Records: photos of one feature are combined, then features within {method['radius_m']} m are grouped by single linkage into one record ({summary['records_merged_from_multiple_features']} of {summary['records']} records combine more than one feature). Each field takes the most common value across assessed photos, ties going to the more cautious value; exact vote counts are kept. Photos from one drive are correlated, so agreement across them is not independent verification. {summary['single_frame_records']} records rest on a single photo.</li>
 <li>Photo shown: the newest assessed photo where the pole is at least {method['readable_px']} px tall, otherwise the largest. The record's fields combine all assessed photos, which can include older ones than the photo shown. The latest available photo, assessed or not, is listed separately.</li>
 <li>Positions on photos: a second model pass (same model, one request per assessed photo) was given the crop with a faint labeled grid and the earlier assessment, and asked for the position of the pole top and base, each counted attachment, the transformer, crossarm damage, and vegetation contact. These are approximate model estimates of where something appears in the photo, shown as markers you can hide. They are not measurements and were not verified.</li>
-<li>Apparent tilt: for each assessed photo, the angle of Mapillary's pole outline from the image vertical (medial axis of the outline, 12 scanlines, least squares). It is a property of the photo, not a measurement of the pole: camera roll, perspective, and a lean toward or away from the camera all distort it.{f" Photos the model called straight read a median of {tilt_meta['none_median']}° and up to {tilt_meta['none_p90']}° at the 90th percentile ({tilt_meta['none_n']:,} photos)." if tilt_meta else ""}</li>
-<li>Possible condition issue: lean moderate or severe, or crossarm damaged, or vegetation touching. Watch item: slight lean, one tier below an issue; it is common ({summary.get('utility_with_warning_flag', 'many')} of {summary['utility_records']} utility poles) and often within the noise of camera angle. Transformers and attachment counts are not condition issues. Attachment count is the number of visible non-electric items the model counted on the pole; it does not identify owners, tenants, or billing status. Coordinates are averaged detection positions, not surveyed.</li>
+<li>Apparent tilt: for each assessed photo, the angle of Mapillary's pole outline from the image vertical (medial axis of the outline, 12 scanlines, least squares). It is a property of the photo, not a measurement of the pole: camera roll, perspective, and a lean toward or away from the camera all distort it.{f" {'Flat photos' if tilt_meta['kind'] == 'flat' else 'Photos'} the model called straight read a median of {tilt_meta['none_median']}° and up to {tilt_meta['none_p90']}° at the 90th percentile ({tilt_meta['none_n']:,} photos); panoramas read noisier." if tilt_meta else ""}</li>
+<li>Possible condition issue: lean moderate or severe, or crossarm damaged, or vegetation touching. Watch item: slight lean, one tier below an issue; it is common ({summary['utility_with_warning_flag']} of {summary['utility_records']} utility poles) and often within the noise of camera angle. Transformers and attachment counts are not condition issues. Attachment count is the number of visible non-electric items the model counted on the pole; it does not identify owners, tenants, or billing status. Coordinates are averaged detection positions, not surveyed.</li>
 </ul>"""
 
 
@@ -221,9 +221,11 @@ def main():
     tilt_meta = None
     if tpath.exists():  # noise floor of the outline tilt, measured against the model's own "none" calls (tilt.py --calibrate)
         cal = json.loads(tpath.read_text())
-        none = (cal.get("by_model_lean_call") or {}).get("none", {}).get("all")
+        none_by_kind = (cal.get("by_model_lean_call") or {}).get("none", {})
+        kind = "flat" if none_by_kind.get("flat") else "all"  # flat photos: panoramas read noisier and would widen the band
+        none = none_by_kind.get(kind)
         if none:
-            tilt_meta = {"none_median": none["median"], "none_p90": none["p90"], "none_n": none["n"], "source": str(tpath.relative_to(ROOT))}
+            tilt_meta = {"none_median": none["median"], "none_p90": none["p90"], "none_n": none["n"], "kind": kind, "source": str(tpath.relative_to(ROOT))}
     out_dir = OUT / slug
     out_dir.mkdir(parents=True, exist_ok=True)
 

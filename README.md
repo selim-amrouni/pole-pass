@@ -32,7 +32,8 @@ crossarm damaged, vegetation touching) are orange. Watch items (slight lean)
 are amber and never counted as issues.
 
 Tests: `node --test tests/*.test.js` covers the shared filter predicates and
-initialization without a map library.
+initialization without a map library; `uv run python3 -m unittest discover -s tests`
+covers the tilt estimator and the grading CSV round trip.
 
 `run.py` chains 1 through 6. Everything caches under `data/`; a rerun makes no
 API calls.
