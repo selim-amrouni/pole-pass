@@ -84,7 +84,7 @@ Plan: ~/.claude/plans/polymorphic-discovering-fountain.md
 - [x] D. "Photographed in more than one year" filter + cross-year compare (23 utility poles). fetch --years dropped: verified 0 of 1725 features have a detection year their top-3 frames miss, so no new fetch or classify was needed
 - [x] E. Issues #18 (coverage-gap layer) and #19 (GIS match) filed; README/CLAUDE.md updated
 - [x] Code-reviewer findings addressed (static exports, strict summary key, flat calibration + pano dots, y-range, keyboard dots, grade.py value/origin/json guards, python tests)
-- [ ] User: grade the sample with grade.py, then validate.py --score, report.py, deploy.sh
+- [~] Hand grading scrapped 2026-09-16 (user is not a pole expert; crossarm etc. too hard to label). 3 of 50 rows partially graded, not scored. Page keeps its "Experimental, not verified" notice. grade.py stays for a future expert grader
 - [ ] User reviews the local page, then PR feature/hook-demo -> main and ./deploy.sh
 
 ### Hook pass review (2026-09-16)
