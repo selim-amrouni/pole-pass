@@ -253,18 +253,18 @@
     const noise = cal ? `${cal.kind === 'flat' ? 'Flat photos' : 'Photos'} the model called straight read up to ${cal.none_p90}° (90th percentile, ${cal.none_n} photos); 360° photos read noisier.` : '';
     const hint = `<p class="hint">Angle of the Mapillary outline from vertical in each photo. Camera roll and perspective add noise. ${noise} Not a measured lean.</p>`;
     if (pts.length === 1) return `<div class="sec tilt"><h3>Apparent tilt in photo</h3><div class="it"><span><b class="mono">${pts[0].t.toFixed(1)}°</b> from vertical, photo from ${esc(dateLabel(r.frames[pts[0].i]))}</span></div>${hint}</div>`;
-    const W = 360, H = 120, L = 30, R = 10, T = 10, B = 24;
+    const W = 360, H = 128, L = 30, R = 10, T = 10, B = 32;
     const ts0 = Math.min(...pts.map(p => p.ts)), ts1 = Math.max(...pts.map(p => p.ts));
     const ymax = Math.max(15, cal ? cal.none_p90 + 5 : 0, Math.ceil(Math.max(...pts.map(p => p.t)) / 5) * 5 + 5);
     const X = ts => ts1 === ts0 ? L + (W - L - R) / 2 : L + (ts - ts0) / (ts1 - ts0) * (W - L - R);
     const Y = t => T + (1 - t / ymax) * (H - T - B);
-    const y0 = new Date(ts0).getUTCFullYear(), y1 = new Date(ts1).getUTCFullYear();
-    const years = []; for (let y = y0; y <= y1; y++) years.push(y);
-    const step = years.length > 6 ? Math.ceil(years.length / 6) : 1;
-    const first = r.frames[pts.reduce((a, p) => p.ts < a.ts ? p : a).i], last = r.frames[pts.reduce((a, p) => p.ts > a.ts ? p : a).i];
-    const xt = y0 === y1  // one calendar year: label the first and last photo month instead
-      ? `<text x="${X(ts0).toFixed(1)}" y="${H - 6}" text-anchor="start">${esc(dateLabel(first))}</text>${ts1 > ts0 && last.date !== first.date ? `<text x="${X(ts1).toFixed(1)}" y="${H - 6}" text-anchor="end">${esc(dateLabel(last))}</text>` : ''}`
-      : years.filter((y, k) => k % step === 0 || y === y1).map(y => { const ts = Math.min(ts1, Math.max(ts0, Date.UTC(y, 0, 1))); return `<text x="${X(ts).toFixed(1)}" y="${H - 6}" text-anchor="${y === y0 ? 'start' : y === y1 ? 'end' : 'middle'}">${y}</text>`; }).join('');
+    // one label per distinct photo month, at that month's earliest photo; two staggered rows, dropped only when there is no room
+    const sameMonth = new Set(pts.map(p => r.frames[p.i].date)).size === 1;  // all photos in one month: label days instead
+    const lbl = p => sameMonth ? new Date(p.ts).toISOString().slice(0, 10) : (r.frames[p.i].date || '?');
+    const months = [...pts.reduce((m, p) => { const d = lbl(p); m.set(d, Math.min(m.get(d) ?? Infinity, p.ts)); return m; }, new Map())].sort((a, b) => a[1] - b[1]);
+    const MINGAP = sameMonth ? 66 : 48, rows = [[], []];
+    months.forEach(([label, ts]) => { const x = Math.min(W - R - 22, Math.max(L + 22, X(ts))); const row = rows.find(rw => !rw.length || x - rw[rw.length - 1].x >= MINGAP); if (row) row.push({ x, label }); });
+    const xt = rows.map((row, k) => row.map(({ x, label }) => `<text x="${x.toFixed(1)}" y="${H - 16 + k * 10}" text-anchor="middle">${esc(label)}</text>`).join('')).join('');
     const yt = [0, 10, 20, 30].filter(v => v <= ymax).map(v => `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 4}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end">${v}°</text>`).join('');
     const band = cal ? `<rect class="band" x="${L}" y="${Y(cal.none_p90).toFixed(1)}" width="${W - L - R}" height="${(Y(0) - Y(cal.none_p90)).toFixed(1)}"/>` : '';
     const dots = pts.sort((a, b) => a.ts - b.ts).map(p => `<circle class="pt ${p.lean === 'moderate' || p.lean === 'severe' ? 'issue' : p.lean === 'slight' ? 'warn' : ''}${p.pano ? ' pano' : ''}${p.i === state.viewing ? ' cur' : ''}" data-i="${p.i}" tabindex="0" role="button" aria-label="View photo from ${esc(dateLabel(r.frames[p.i]))}, ${p.t.toFixed(1)} degrees in photo" cx="${X(p.ts).toFixed(1)}" cy="${Y(p.t).toFixed(1)}" r="5"><title>${esc(dateLabel(r.frames[p.i]))}: ${p.t.toFixed(1)}° in photo</title></circle>`).join('');
