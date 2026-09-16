@@ -33,11 +33,11 @@ button { font: inherit; color: inherit; }
 .intro p { margin: 0; max-width: 78ch; color: var(--ink-2); }
 .notice { margin: 8px 0 0; padding: 6px 10px; border-left: 3px solid var(--issue); background: var(--issue-bg); font-size: 14px; max-width: 78ch; }
 .notice a { color: inherit; }
-.summary { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px; }
+.summary { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 20px 4px; }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; min-width: 150px; }
 .tile .v { font-family: var(--mono); font-size: 22px; font-weight: 500; line-height: 1.1; }
 .tile .l { font-size: 13px; color: var(--ink-2); } .tile .q { font-size: 12px; color: var(--ink-3); }
-.meta { padding: 0 20px 8px; font-size: 12.5px; color: var(--ink-3); }
+.meta { padding: 0 20px 6px; font-size: 12px; color: var(--ink-3); }
 
 /* toolbar */
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 20px; background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
@@ -99,9 +99,18 @@ details.adv { font-size: 13px; } details.adv summary { cursor: pointer; color: v
 .imgwrap svg.ov polygon { fill: none; vector-effect: non-scaling-stroke; }
 .imgwrap svg.ov polygon.halo { stroke: rgba(255,255,255,.95); stroke-width: 5px; }
 .imgwrap svg.ov polygon.line { stroke: #1b5e8a; stroke-width: 2px; fill: rgba(27,94,138,.08); }
+.imgwrap svg.ov .axis { stroke: #8fd3ff; stroke-width: 2px; stroke-dasharray: 6 4; fill: none; }
+.imgwrap svg.ov .mk { fill: rgba(255,255,255,.92); stroke-width: 2px; }
+.imgwrap svg.ov .mk.att { stroke: #2c6e6b; } .imgwrap svg.ov .mk.xfmr { stroke: #1c1c1a; } .imgwrap svg.ov .mk.issue { stroke: #c2410c; fill: rgba(253,240,232,.95); }
+.imgwrap svg.ov text { font: 600 11px var(--sans); fill: #1c1c1a; }
+.ovbar { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 6px 12px; font-size: 12.5px; color: var(--ink-2); background: var(--panel); border-bottom: 1px solid var(--line-2); }
+.ovbar label { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; cursor: pointer; }
+.mklegend { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 4px 12px 8px; font-size: 12px; color: var(--ink-2); }
+.mklegend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid; margin-right: 4px; vertical-align: -2px; background: #fff; }
+.mklegend i.sq { border-radius: 2px; } .mklegend i.dm { transform: rotate(45deg); border-radius: 2px; } .mklegend i.tri { border: 0; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 12px solid #c2410c; background: none; border-radius: 0; }
 .badges { position: absolute; left: 8px; top: 8px; display: flex; flex-wrap: wrap; gap: 4px; line-height: 1.4; text-align: left; max-width: calc(100% - 16px); }
 .badges .flag { background: rgba(255,255,255,.92); }
-.ovtoggle { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); padding: 6px 12px; }
+.ovnote { font-size: 12px; color: var(--ink-3); padding: 0 12px 6px; }
 .photo .cap { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 6px 12px; font-size: 13px; background: var(--bg); border-bottom: 1px solid var(--line); }
 .photo .cap a { white-space: nowrap; }
 .photo-missing { padding: 28px 12px; text-align: center; color: #ddd; }

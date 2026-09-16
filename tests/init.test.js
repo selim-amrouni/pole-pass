@@ -28,9 +28,9 @@ test('initializes without maplibregl: fallback shown, list and count rendered, e
   assert.equal(document.getElementById('legend').hidden, true);
   const util = window.POLE_DATA.records.filter(r => r.util).length;
   assert.match(document.getElementById('count').innerHTML, new RegExp(`of <span class="mono">${util}</span>`));
-  assert.equal(document.getElementById('list').querySelectorAll('.row').length, Math.min(50, util));
+  assert.equal(document.getElementById('list').querySelectorAll('.row').length, Math.min(20, util));
   assert.equal(PP.state.selected, window.POLE_DATA.meta.example_id);
-  assert.match(document.getElementById('detail').innerHTML, /Selected example/);
+  assert.match(document.getElementById('detail').innerHTML, /Example record/);
   assert.match(document.getElementById('detail').innerHTML, /Photo taken/);
 });
 
@@ -41,7 +41,7 @@ test('filters change list, count, and filtered export together', () => {
   chip.click();
   assert.equal(PP.filtered.length, lean);
   assert.match(document.getElementById('count').innerHTML, new RegExp(`of <span class="mono">${lean}</span>`));
-  assert.equal(document.getElementById('list').querySelectorAll('.row').length, Math.min(50, lean));
+  assert.equal(document.getElementById('list').querySelectorAll('.row').length, Math.min(20, lean));
   assert.ok(PP.filtered.every(r => r.lean === 'moderate' || r.lean === 'severe'));
 });
 
@@ -57,7 +57,7 @@ test('empty result shows the empty state with a reset', () => {
 test('deep link selects the record; unknown id is reported', () => {
   const a = boot('#pole=gree-00309');
   assert.equal(a.PP.state.selected, 'gree-00309');
-  assert.doesNotMatch(a.document.getElementById('detail').innerHTML, /Selected example/);
+  assert.doesNotMatch(a.document.getElementById('detail').innerHTML, /Example record/);
   const b = boot('#pole=nope-1');
   assert.equal(b.PP.state.selected, null);
   assert.match(b.document.getElementById('list').parent.innerHTML + b.document.body.querySelectorAll('.empty').map(e => e.textContent).join(''), /No record with id/);

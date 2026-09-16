@@ -80,7 +80,26 @@ def load_polygons(slug):
     return out
 
 
-def build_records(poles, out_dir, polygons):
+def load_marks(slug):
+    """detection_id -> model-located positions (normalized to the crop), or {} if the locate pass has not run."""
+    p = DATA / "locate" / slug / "locations.jsonl"
+    out = {}
+    if not p.exists():
+        return out
+    for line in p.open():
+        o = json.loads(line)
+        loc = o.get("locations")
+        if not loc:
+            continue
+        pt = lambda q: [round(q["x"], 3), round(q["y"], 3)] if q else None
+        out[o["detection_id"]] = {"top": pt(loc.get("pole_top")), "base": pt(loc.get("pole_base")),
+                                  "att": [{"p": pt(a), "l": a.get("label", "")} for a in loc.get("attachments", []) if a],
+                                  "xfmr": pt(loc.get("transformer")), "xarm": pt(loc.get("crossarm_damage")),
+                                  "veg": pt(loc.get("vegetation_contact")), "note": loc.get("notes") or ""}
+    return out
+
+
+def build_records(poles, out_dir, polygons, marks):
     rows = []
     for p in poles:
         shown_img = f"crops/{p['pole_id']}.jpg" if resized(p.get("best_crop"), out_dir / "crops" / f"{p['pole_id']}.jpg", CROP_PX) else None
@@ -88,7 +107,7 @@ def build_records(poles, out_dir, polygons):
         for f in p["frames"]:
             img = f"frames/{f['image_id']}.jpg" if resized(f.get("crop"), out_dir / "frames" / f"{f['image_id']}.jpg", FRAME_PX, 78) else None
             det = Path(f["crop"]).stem if f.get("crop") else None
-            frames.append({"poly": polygons.get(det),"id": f["image_id"], "date": ms_date(f.get("captured_at")), "ts": f.get("captured_at"), "year": ms_year(f.get("captured_at")),
+            frames.append({"poly": polygons.get(det), "marks": marks.get(det),"id": f["image_id"], "date": ms_date(f.get("captured_at")), "ts": f.get("captured_at"), "year": ms_year(f.get("captured_at")),
                            "url": f["url"], "px": f.get("px_h"), "pano": bool(f.get("is_pano")), "seq": f.get("sequence"), "img": img, "by": f.get("creator"),
                            "type": f["pole_type"], "lean": f["lean"], "xarm": f["crossarm"], "veg": f["vegetation"], "xfmr": bool(f["transformer"]),
                            "att": f["attachments"], "conf": f.get("confidence"), "note": f.get("note") or "", "shown": bool(f.get("shown"))})
@@ -159,6 +178,7 @@ def tech_details(summary, coverage, method):
 <li>Model: {method['model']} through the Batches API, one crop per request, a fixed JSON schema (pole present, pole type, material, lean, crossarm, transformer, vegetation, attachment count, self-rating, note). The self-rating is not calibrated. Notes are free text and are shown only per photo under technical details.</li>
 <li>Records: photos of one feature are combined, then features within {method['radius_m']} m are grouped by single linkage into one record ({summary['records_merged_from_multiple_features']} of {summary['records']} records combine more than one feature). Each field takes the most common value across assessed photos, ties going to the more cautious value; exact vote counts are kept. Photos from one drive are correlated, so agreement across them is not independent verification. {summary['single_frame_records']} records rest on a single photo.</li>
 <li>Photo shown: the newest assessed photo where the pole is at least {method['readable_px']} px tall, otherwise the largest. The record's fields combine all assessed photos, which can include older ones than the photo shown. The latest available photo, assessed or not, is listed separately.</li>
+<li>Positions on photos: a second model pass (same model, one request per assessed photo) was given the crop with a faint labeled grid and the earlier assessment, and asked for the position of the pole top and base, each counted attachment, the transformer, crossarm damage, and vegetation contact. These are approximate model estimates of where something appears in the photo, shown as markers you can hide. They are not measurements and were not verified.</li>
 <li>Possible condition issue: lean moderate or severe, or crossarm damaged, or vegetation touching. Transformers and attachment counts are not condition issues. Attachment count is the number of visible non-electric items the model counted on the pole; it does not identify owners, tenants, or billing status. Coordinates are averaged detection positions, not surveyed.</li>
 </ul>"""
 
@@ -191,7 +211,8 @@ def main():
     out_dir = OUT / slug
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    rows = build_records(poles, out_dir, load_polygons(slug))
+    marks = load_marks(slug)
+    rows = build_records(poles, out_dir, load_polygons(slug), marks)
     version = hashlib.sha1(json.dumps([{k: v for k, v in r.items() if k not in ("shown", "frames")} for r in rows], sort_keys=True).encode()).hexdigest()[:8]
     example = args.example or DEFAULT_EXAMPLE.get(slug)
     if example and example not in {r["id"] for r in rows}:
@@ -218,10 +239,12 @@ def main():
         "LOCATION": meta["location"], "GENERATED": generated, "VERSION": version, "VALIDATION_NOTICE": notice,
         "VALIDATION_SECTION": vsection, "TECH_DETAILS": tech_details(summary, coverage, method),
         "CONTACT_NAV": contact_nav, "CONTACT_SECTION": contact_section, "ATTRIBUTION": ATTRIBUTION,
+        "BUILD": hashlib.sha1(b"".join((WEB / f).read_bytes() for f in ("style.css", "app.js", "predicates.js")) + version.encode()).hexdigest()[:8],
     })
     (out_dir / "index.html").write_text(html)
     size = sum(f.stat().st_size for f in out_dir.rglob("*") if f.is_file()) / 1e6
     nframes = len(list((out_dir / "frames").glob("*.jpg")))
+    print(f"model-located positions for {len(marks)} of {summary['frames_classified']} assessed photos")
     print(f"{len(rows)} records ({meta['counts']['utility']} utility) -> {out_dir.relative_to(ROOT)}/  {size:.0f} MB, {nframes} frame images, version {version}"
           + ("" if args.contact else "  [no contact configured: contact button omitted]"))
     print(f"open {out_dir / 'index.html'}")

@@ -22,8 +22,8 @@
   const dateLabel = d => d && d.date ? d.date : 'Date unknown';
 
   // ---------- state ----------
-  const state = { flag: 'all', yearMin: null, yearMax: null, recent: null, other: false, sort: 'date_desc', page: 1, selected: null, viewing: null, compare: false, colorMode: 'condition', tab: 'list', example: false, outline: true };
-  const PAGE = 50;
+  const state = { flag: 'all', yearMin: null, yearMax: null, recent: null, other: false, sort: 'date_desc', page: 1, selected: null, viewing: null, compare: false, colorMode: 'condition', tab: 'list', example: false, outline: true, markers: true, badges: true };
+  const PAGE = 20;
   const byId = Object.fromEntries(D.records.map(r => [r.id, r]));
   const yearsAll = D.records.filter(PP.isUtility).map(r => r.shown.year).filter(y => y != null);
   const Y0 = yearsAll.length ? Math.min(...yearsAll) : null, Y1 = yearsAll.length ? Math.max(...yearsAll) : null;
@@ -152,11 +152,25 @@
     const flags = [...PP.conditionFlags(r), PP.attachments3(r) && 'att3', PP.transformerVisible(r) && 'xfmr'].filter(Boolean);
     const rv = review[r.id] || { flags: {}, note: '' };
     const frameFlags = f ? [(f.lean === 'moderate' || f.lean === 'severe') && L.flag.lean, f.xarm === 'damaged' && L.flag.crossarm, f.veg === 'touching' && L.flag.vegetation, f.xfmr && L.flag.xfmr, Number.isInteger(f.att) && f.att >= 3 && `${f.att} estimated attachments`].filter(Boolean) : [];
-    const overlay = f && f.poly && state.outline ? `<svg class="ov" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true"><polygon class="halo" points="${f.poly.map(p => p.join(',')).join(' ')}"/><polygon class="line" points="${f.poly.map(p => p.join(',')).join(' ')}"/></svg>` : '';
-    const badges = frameFlags.length ? `<div class="badges" aria-hidden="true">${frameFlags.map(x => `<span class="flag ${/attachments/.test(x) ? 'att' : x === L.flag.xfmr ? '' : 'issue'}">${esc(x)}</span>`).join('')}</div>` : '';
+    const m = f && f.marks;
+    // SVG is drawn in a 1000 x 1000 box stretched over the image; coordinates are fractions of the crop.
+    const S = 1000, px = p => `${(p[0] * S).toFixed(1)},${(p[1] * S).toFixed(1)}`;
+    const circle = (p, cls, label) => `<circle class="mk ${cls}" cx="${p[0] * S}" cy="${p[1] * S}" r="11" vector-effect="non-scaling-stroke"/>${label ? `<text x="${p[0] * S}" y="${p[1] * S + 4}" text-anchor="middle">${esc(label)}</text>` : ''}`;
+    const square = (p, cls) => `<rect class="mk ${cls}" x="${p[0] * S - 10}" y="${p[1] * S - 10}" width="20" height="20" vector-effect="non-scaling-stroke"/>`;
+    const diamond = (p, cls) => `<polygon class="mk ${cls}" points="${px([p[0], p[1] - 0.013])} ${px([p[0] + 0.013, p[1]])} ${px([p[0], p[1] + 0.013])} ${px([p[0] - 0.013, p[1]])}" vector-effect="non-scaling-stroke"/>`;
+    const tri = (p, cls) => `<polygon class="mk ${cls}" points="${px([p[0], p[1] - 0.014])} ${px([p[0] + 0.013, p[1] + 0.01])} ${px([p[0] - 0.013, p[1] + 0.01])}" vector-effect="non-scaling-stroke"/>`;
+    let svg = '';
+    if (f && f.poly && state.outline) svg += `<polygon class="halo" points="${f.poly.map(p => px(p)).join(' ')}"/><polygon class="line" points="${f.poly.map(p => px(p)).join(' ')}"/>`;
+    if (m && state.markers) {
+      if (m.top && m.base) svg += `<line class="axis" x1="${m.top[0] * S}" y1="${m.top[1] * S}" x2="${m.base[0] * S}" y2="${m.base[1] * S}" vector-effect="non-scaling-stroke"/>`;
+      m.att.forEach((a, i) => { if (a.p) svg += circle(a.p, 'att', String(i + 1)); });
+      if (m.xfmr) svg += square(m.xfmr, 'xfmr'); if (m.xarm) svg += tri(m.xarm, 'issue'); if (m.veg) svg += diamond(m.veg, 'issue');
+    }
+    const overlay = svg ? `<svg class="ov" viewBox="0 0 ${S} ${S}" preserveAspectRatio="none" aria-hidden="true">${svg}</svg>` : '';
+    const badges = frameFlags.length && state.badges ? `<div class="badges" aria-hidden="true">${frameFlags.map(x => `<span class="flag ${/attachments/.test(x) ? 'att' : x === L.flag.xfmr ? '' : 'issue'}">${esc(x)}</span>`).join('')}</div>` : '';
     const photo = f && f.img ? `<div class="imgwrap"><img id="dimg" src="${esc(f.img)}" alt="Photo of ${esc(r.id)} taken ${esc(dateLabel(f))}">${overlay}${badges}</div>`
       : `<div class="photo-missing">Photo unavailable.${f && f.url ? ` <a href="${esc(f.url)}" target="_blank" rel="noopener">Open source photo</a>` : ''}</div>`;
-    const others = r.frames.length > 1 ? `<div class="sec"><h3>Other photos</h3><p class="small muted" style="margin:0 0 6px">${r.frames.length} photos from ${r.seq} capture sequence${r.seq === 1 ? '' : 's'}. Photos from one drive are related, not independent.</p>
+    const others = r.frames.length > 1 ? `<div class="sec"><h3>Other photos</h3><p class="small muted" style="margin:0 0 6px">${r.frames.length} photos · ${r.seq} drive${r.seq === 1 ? '' : 's'}</p>
       <div class="thumbs">${r.frames.map((x, i) => `<button data-i="${i}" aria-pressed="${i === state.viewing}" aria-label="View photo from ${esc(dateLabel(x))}">${x.img ? `<img src="${esc(x.img)}" alt="">` : `<span class="ph" style="width:80px;height:80px;display:grid;place-items:center;font-size:11px">No image</span>`}<span class="c">${esc(x.date || '?')}</span></button>`).join('')}</div>
       <p style="margin:8px 0 0"><button class="btn sm" id="cmp" aria-pressed="${state.compare}">Compare photos</button></p>
       ${state.compare ? compareHtml(r) : ''}</div>` : '';
@@ -164,18 +178,25 @@
     $('detail').innerHTML = `
       <div class="detail-h"><button class="btn sm" id="back" aria-label="Back to list">← Back to list</button><span class="id">${esc(r.id)}</span>
         <div class="nav"><span class="small muted" id="pos"></span><button class="btn sm" id="prev" aria-label="Previous pole">Prev</button><button class="btn sm" id="next" aria-label="Next pole">Next</button><button class="btn sm" id="close" aria-label="Close details">Close</button></div></div>
-      ${state.example ? `<div class="example-tag">Selected example. Pick any pole from the list or map, or close this to return to the overview.</div>` : ''}
+      ${state.example ? `<div class="example-tag">Example record. Pick any pole from the list or map.</div>` : ''}
       <div class="dbody">
       <div class="dphoto">
         <div class="photo">${photo}</div>
-        <div class="cap"><span><span class="muted">Photo taken</span> <b>${esc(dateLabel(f))}</b>${f && f.pano ? ' · 360° photo' : ''}${f && f.shown ? (r.shown.newest ? ' · newest readable photo' : ' · clearest photo; newer photos too small') : ''}</span>
+        <div class="cap"><span><span class="muted">Photo taken</span> <b>${esc(dateLabel(f))}</b>${f && f.pano ? ' · 360° photo' : ''}${f && f.shown ? (r.shown.newest ? ' · newest readable' : ' · clearest available') : ''}</span>
           ${f && f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">Open source photo</a>` : ''}${f && f.img ? `<button class="btn sm" id="enlarge">Enlarge</button>` : ''}${f && f.by ? `<span class="muted small">by ${esc(f.by)} (Mapillary)</span>` : ''}</div>
-        ${f && f.poly ? `<label class="ovtoggle"><input type="checkbox" id="ovtoggle" ${state.outline ? 'checked' : ''}> Outline the detected pole (Mapillary detection the assessment refers to). Badges show this photo's model flags; positions of issues are not available.</label>` : `<p class="ovtoggle">No detection outline for this photo. Badges show this photo's model flags; positions of issues are not available.</p>`}
+        <div class="ovbar" role="group" aria-label="Photo annotations">
+          <span class="muted">Show:</span>
+          <label><input type="checkbox" id="tg-outline" ${state.outline ? 'checked' : ''} ${f && f.poly ? '' : 'disabled'}> Pole outline</label>
+          <label><input type="checkbox" id="tg-markers" ${state.markers ? 'checked' : ''} ${m ? '' : 'disabled'}> Markers</label>
+          <label><input type="checkbox" id="tg-badges" ${state.badges ? 'checked' : ''} ${frameFlags.length ? '' : 'disabled'}> Flag badges</label>
+        </div>
+        ${m && state.markers ? `<div class="mklegend"><span><i style="border-color:#1b5e8a"></i>Detected pole (Mapillary)</span><span><i style="border-color:#8fd3ff;border-style:dashed"></i>Pole axis</span><span><i style="border-color:#2c6e6b"></i>Attachment, numbered (${m.att.length})</span>${m.xfmr ? '<span><i class="sq" style="border-color:#1c1c1a"></i>Transformer</span>' : ''}${m.xarm ? '<span><i class="tri"></i>Crossarm damage</span>' : ''}${m.veg ? '<span><i class="dm" style="border-color:#c2410c"></i>Vegetation contact</span>' : ''}</div>
+        <p class="ovnote">Approximate model positions.${m.att.length ? ` ${m.att.map((a, i) => `${i + 1} ${esc(a.l)}`).join(' · ')}` : ''}</p>` : ''}
         ${others}
       </div>
       <div class="dtext">
-      ${f ? `<div class="sec"><h3>This photo's observation</h3><div class="small">${frameObs(f).map(esc).join(' · ')}</div>${f.note ? `<div class="small muted" style="margin-top:4px">Model note for this photo: ${esc(f.note)}</div>` : ''}</div>` : ''}
-      <div class="sec"><h3>Model assessment${r.n > 1 ? ` (combined across ${r.n} photos)` : ''}</h3>
+      ${f ? `<div class="sec"><h3>This photo's observation</h3><div class="small">${frameObs(f).map(esc).join(' · ')}</div></div>` : ''}
+      <div class="sec"><h3>Model assessment${r.n > 1 ? ` · ${r.n} photos combined` : ''}</h3>
         <div class="kv">
           <div class="k">Type</div><div>${esc(L.type[r.type] || r.type)} <span class="agree">${esc(agreeText(r, 'type'))}</span></div>
           <div class="k">Lean</div><div>${esc(L.lean[r.lean] || r.lean)} <span class="agree">${esc(agreeText(r, 'lean'))}</span></div>
@@ -185,18 +206,18 @@
           <div class="k">Attachments</div><div>${esc(attLabel(r))} <span class="agree">${esc(agreeText(r, 'att'))}</span></div>
           <div class="k">Material</div><div>${esc(L.mat[r.material] || r.material)}</div>
           ${latest}
-          <div class="k">Location</div><div class="mono small">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)} <span class="agree">estimated from ${r.nfeat} detection${r.nfeat === 1 ? '' : 's'}</span></div>
+          <div class="k">Location</div><div class="mono small">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)} <span class="agree">${r.nfeat} detection${r.nfeat === 1 ? '' : 's'}</span></div>
         </div>
-        <p class="small muted" style="margin:6px 0 0">Model agreement across photos: the number of photos whose result matches the combined value. ${r.n === 1 ? 'Only one photo was assessed.' : ''} An attachment is a visible non-electric item on the pole (cable bundle, box, riser, antenna). It says nothing about ownership.</p></div>
-      ${util && flags.length ? `<div class="sec review"><h3>Your review of the model flags</h3>
+        </div></div>
+      ${util && flags.length ? `<div class="sec review"><h3>Your review</h3>
         ${flags.map(k => `<div><div class="small"><b>${esc(L.flag[k])}</b></div><div class="opt" role="group" aria-label="Review ${esc(L.flag[k])}">${['supported', 'not_supported', 'cannot_tell'].map(v => `<button class="btn sm" data-rf="${k}" data-rv="${v}" aria-pressed="${rv.flags[k] === v}">${L.review[v]}</button>`).join('')}</div></div>`).join('')}
         <label class="small" for="rnote">Note (optional)</label><textarea id="rnote" maxlength="500">${esc(rv.note || '')}</textarea>
-        <p class="scope">Saved in this browser only, for dataset version ${esc(D.meta.version)}. Not shared through links. Judges whether the photo supports the flag, not whether the pole is safe. <button class="btn sm" id="rreset">Reset review</button></p></div>` : ''}
+        <p class="scope">Saved in this browser only. <button class="btn sm" id="rreset">Reset</button></p></div>` : ''}
       <details class="tech sec"><summary>Technical details</summary>
-        <p class="small muted">Raw model outputs per photo. Self-rating is the model's own 0 to 1 confidence and is not calibrated. Notes are free text from the model and may overstate what a photo shows.</p>
+        <p class="small muted">Raw model output per photo. Self-rating is uncalibrated. Notes are free text and may overstate.</p>
         <table><thead><tr><th>Photo</th><th>Pole px</th><th>Type</th><th>Lean</th><th>Crossarm</th><th>Veg.</th><th>Xfmr</th><th>Att.</th><th>Self-rating</th><th>Note</th></tr></thead>
         <tbody>${r.frames.map(x => `<tr><td class="mono">${esc(x.date || '?')}${x.pano ? ' 360°' : ''}</td><td class="mono">${x.px ?? ''}</td><td>${esc(x.type)}</td><td>${esc(x.lean)}</td><td>${esc(x.xarm)}</td><td>${esc(x.veg)}</td><td>${x.xfmr ? 'yes' : 'no'}</td><td class="mono">${x.att ?? ''}</td><td class="mono">${x.conf ?? ''}</td><td>${esc(x.note)}</td></tr>`).join('')}</tbody></table>
-        <p class="small muted">Mapillary feature ids: <span class="mono">${r.features.map(esc).join(', ')}</span>. Record id is a demo identifier, not a utility asset id. Grouping radius ${esc(D.meta.method.radius_m)} m; grouped detections can merge distinct objects or leave duplicates.</p></details>
+        <p class="small muted">Mapillary features: <span class="mono">${r.features.map(esc).join(', ')}</span> · grouped within ${esc(D.meta.method.radius_m)} m · demo id, not an asset id.</p></details>
       </div></div>`;
     $('detail').hidden = false;
     updateDetailNav();
@@ -311,7 +332,7 @@
       if (t.dataset.i != null) { state.viewing = +t.dataset.i; state.compare = false; renderDetail(); $('detail').querySelector(`[data-i="${state.viewing}"]`).focus(); return; }
       if (t.dataset.rf) { const rv = review[state.selected] || { flags: {}, note: '' }; rv.flags[t.dataset.rf] = rv.flags[t.dataset.rf] === t.dataset.rv ? null : t.dataset.rv; review[state.selected] = rv; saveReview(review); renderDetail(); refreshRowStatus(); $('detail').querySelector(`[data-rf="${t.dataset.rf}"][data-rv="${t.dataset.rv}"]`).focus(); }
     });
-    $('detail').addEventListener('change', e => { if (e.target.id === 'ovtoggle') { state.outline = e.target.checked; renderDetail(); $('ovtoggle').focus(); } });
+    $('detail').addEventListener('change', e => { const k = { 'tg-outline': 'outline', 'tg-markers': 'markers', 'tg-badges': 'badges' }[e.target.id]; if (k) { state[k] = e.target.checked; renderDetail(); const el = $(e.target.id); if (el) el.focus(); } });
     $('detail').addEventListener('input', e => { if (e.target.id === 'rnote') { const rv = review[state.selected] || { flags: {}, note: '' }; rv.note = e.target.value; review[state.selected] = rv; saveReview(review); } });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && state.selected && !$('lb').open) close(); });
     $('lb-close').addEventListener('click', () => $('lb').close());

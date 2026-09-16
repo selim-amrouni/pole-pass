@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:wght@500&display=swap" rel="stylesheet">
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v={{BUILD}}">
 </head>
 <body>
 <header class="hdr">
@@ -27,7 +27,7 @@
 </section>
 
 <section class="summary" id="summary" aria-label="Summary"></section>
-<p class="meta">Report generated {{GENERATED}}. Dataset version <span class="mono">{{VERSION}}</span>. Counts are model estimates from the records in this dataset.</p>
+<p class="meta">Generated {{GENERATED}} · dataset <span class="mono">{{VERSION}}</span> · counts are model estimates</p>
 
 <div class="tabs" role="tablist" aria-label="View">
   <button class="btn" role="tab" id="tab-list" aria-selected="true" data-tab="list">List</button>
@@ -74,7 +74,7 @@
 
 <div class="ws" id="ws" data-tab="list">
   <section class="pane" aria-label="Poles to review">
-    <div class="pane-h"><h2>Poles to review</h2><p>Open a pole to review its photos.</p></div>
+    <div class="pane-h"><h2>Poles to review</h2></div>
     <div class="count" id="count" aria-live="polite"></div>
     <div class="list" id="list" role="listbox" aria-label="Pole records"></div>
   </section>
@@ -113,8 +113,8 @@
 </footer>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="predicates.js"></script>
-<script src="data.js"></script>
-<script src="app.js"></script>
+<script src="predicates.js?v={{BUILD}}"></script>
+<script src="data.js?v={{BUILD}}"></script>
+<script src="app.js?v={{BUILD}}"></script>
 </body>
 </html>
