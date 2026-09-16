@@ -4,7 +4,8 @@ Utility pole condition and joint-use attachments, read from public street-level
 imagery. One command per territory, no model training, no GPU, a few dollars of
 API cost, and a static page a utility can open.
 
-Live demo (Greenpoint, Brooklyn): https://selim-amrouni.github.io/pole-pass/
+Live demo: https://selim-amrouni.github.io/pole-pass/ (Greenpoint, Brooklyn, a city
+territory; Hardwick, Vermont, a backcountry one, selectable in the header).
 
 ## What it does
 
@@ -25,7 +26,9 @@ Live demo (Greenpoint, Brooklyn): https://selim-amrouni.github.io/pole-pass/
    page can say how far from vertical a straight pole reads.
 7. `report.py` fills `web/index.html` and copies `web/*.{css,js}` into
    `out/<territory>/` with `data.js`, CSV and GeoJSON exports, and per-photo
-   images. `deploy.sh` pushes that folder to GitHub Pages.
+   images. `deploy.sh <slug> [<slug> ...]` pushes those folders to GitHub Pages,
+   one territory per path, with a selector in the header fed by
+   `web/territories.json` (name and kind: city or backcountry).
 
 Flags come in two tiers. Possible condition issues (lean moderate or severe,
 crossarm damaged, vegetation touching) are orange. Watch items (slight lean)

@@ -50,7 +50,7 @@
       `<span class="pill issue" title="Possible lean, crossarm damage, or vegetation contact"><b>${s.conditionIssues}</b>possible condition issues</span>`,
       `<span class="pill warn" title="Slight lean in the photos: a watch item, not a condition issue"><b>${s.warnings}</b>to watch</span>`,
       `<span class="pill att" title="Visible non-electric attachments"><b>${s.attachments3}</b>with 3+ attachments</span>`,
-      `<span class="pill" title="Dates of the photos shown for the ${s.utility} poles${s.undated ? `; ${s.undated} without a date` : ''}"><b>${esc(dates)}</b>photo dates</span>`,
+      `<span class="pill" title="Dates of the photos shown for the ${s.utility} poles${s.undated ? `; ${s.undated} without a date` : ''}"><b>${esc(dates)}</b>photos</span>`,
     ].join('');
     $('dates-label').textContent = dates;
   }
@@ -414,6 +414,22 @@
   function refreshRowStatus() { document.querySelectorAll('.row').forEach(el => { const r = byId[el.dataset.id]; if (r) el.outerHTML = rowHtml(r); }); document.querySelectorAll('.row').forEach(el => el.setAttribute('aria-selected', String(el.dataset.id === state.selected))); }
   function parseHash() { const m = /[#&]pole=([^&]+)/.exec(location.hash); return m ? decodeURIComponent(m[1]) : null; }
 
+  // ---------- territories ----------
+  // The deployed site holds one bundle per territory under /<slug>/ and a territories.json at the root.
+  // A local preview has neither, so the selector stays hidden and the plain name shows.
+  function initTerritories() {
+    if (typeof fetch !== 'function') return;
+    fetch('../territories.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).then(list => {
+      if (!Array.isArray(list) || !list.some(t => t.slug === D.meta.slug)) return;
+      const me = list.find(t => t.slug === D.meta.slug);
+      const sel = $('territory');
+      sel.innerHTML = list.map(t => `<option value="${esc(t.slug)}"${t.slug === D.meta.slug ? ' selected' : ''}>${esc(t.name)}</option>`).join('');
+      sel.hidden = false; $('loc-name').hidden = true;
+      if (me.kind) { $('kind').textContent = me.kind; $('kind').className = `kind ${esc(me.kind)}`; $('kind').hidden = false; }
+      sel.addEventListener('change', e => { location.href = `../${encodeURIComponent(e.target.value)}/`; });
+    }).catch(() => { /* no territory list: single-territory page */ });
+  }
+
   // ---------- init ----------
   function init() {
     ['year-min', 'year-max'].forEach(id => { $(id).min = Y0 ?? ''; $(id).max = Y1 ?? ''; });
@@ -428,6 +444,7 @@
     }  // no record opens by default: the first view is the list beside the map
     mapApi = initMap();
     if (state.selected) { mapApi.toMini(); mapApi.select(byId[state.selected]); }
+    initTerritories();
   }
   try { init(); } catch (e) { $('count').textContent = 'The page failed to initialize.'; console.error(e); }
   window.PolePass = { state, select, close, refresh, get filtered() { return filtered; } };
