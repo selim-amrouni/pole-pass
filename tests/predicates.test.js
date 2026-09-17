@@ -27,6 +27,16 @@ test('slight lean is a watch item, one tier below a condition issue', () => {
   assert.deepEqual(sorted, ['i', 'w', 'n'], 'issues first, then watch items');
 });
 
+test('notInOsm: utility record with no OSM pole within the 15 m headline radius; absent osm field counts as not in OSM', () => {
+  const near = rec({ id: 'near', osm: 6.2 }), edge = rec({ id: 'edge', osm: 15 }), far = rec({ id: 'far', osm: 22 }), none = rec({ id: 'none', osm: null }), unchecked = rec({ id: 'u' });
+  assert.equal(PP.notInOsm(near), false); assert.equal(PP.notInOsm(edge), false);
+  assert.equal(PP.notInOsm(far), true); assert.equal(PP.notInOsm(none), true); assert.equal(PP.notInOsm(unchecked), true);
+  assert.equal(PP.notInOsm(rec({ util: false, osm: null })), false, 'other objects are never counted');
+  assert.deepEqual(PP.applyFilters([near, far, none], { flag: 'all', osm: true }).map(r => r.id), ['far', 'none']);
+  assert.deepEqual(PP.applyFilters([near, far, none], { flag: 'all' }).map(r => r.id), ['near', 'far', 'none'], 'off by default');
+  assert.equal(PP.summary([near, far, none, rec({ util: false, osm: null })]).notInOsm, 2);
+});
+
 test('spansYears needs two distinct photo years; the filter keeps only those records', () => {
   const two = rec({ id: 'two', frames: [{ year: 2019 }, { year: 2019 }, { year: 2024 }] }), one = rec({ id: 'one', frames: [{ year: 2024 }, { year: null }] });
   assert.deepEqual(PP.frameYears(two), [2019, 2024]);

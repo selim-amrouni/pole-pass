@@ -7,7 +7,7 @@ const path = require('path');
 const { makeDocument } = require('./fakedom.js');
 
 const OUT = path.join(__dirname, '..', 'out', 'greenpoint-brooklyn-new-york');
-const IDS = ['summary', 'dates-label|span', 'territory|select', 'loc-name|span', 'kind|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|button', 'other|input', 'years|input', 'years-n|span', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img'];
+const IDS = ['summary', 'dates-label|span', 'territory|select', 'loc-name|span', 'kind|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|button', 'other|input', 'years|input', 'years-n|span', 'osm-wrap|label', 'osm|input', 'osm-n|span', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img'];
 
 function boot(hash = '', width = 1440, extra = {}) {
   const document = makeDocument(IDS.map(s => s.split('|')));

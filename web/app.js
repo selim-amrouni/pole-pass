@@ -25,7 +25,7 @@
   const dateLabel = d => d && d.date ? d.date : 'Date unknown';
 
   // ---------- state ----------
-  const state = { flag: 'all', yearMin: null, yearMax: null, recent: null, other: false, years: false, sort: 'date_desc', page: 1, selected: null, viewing: null, compare: false, colorMode: 'condition', tab: 'list', example: false, outline: true, markers: true, badges: true };
+  const state = { flag: 'all', yearMin: null, yearMax: null, recent: null, other: false, years: false, osm: false, sort: 'date_desc', page: 1, selected: null, viewing: null, compare: false, colorMode: 'condition', tab: 'list', example: false, outline: true, markers: true, badges: true };
   const PAGE = 20;
   const byId = Object.fromEntries(D.records.map(r => [r.id, r]));
   const yearsAll = D.records.filter(PP.isUtility).map(r => r.shown.year).filter(y => y != null);
@@ -60,6 +60,7 @@
   function renderChips() {
     const base = D.records.filter(r => state.other ? !PP.isUtility(r) : PP.isUtility(r));
     $('years-n').textContent = String(base.filter(PP.spansYears).length);
+    if (D.meta.osm) $('osm-n').textContent = String(base.filter(PP.notInOsm).length);
     $('chips').innerHTML = CHIPS.map(([k, label, cls]) => `<button class="chip ${cls}" data-f="${k}" aria-pressed="${state.flag === k}">${esc(label)}<span class="n">${base.filter(PP.FILTERS[k]).length}</span></button>`).join('');
   }
   function readYearInputs() {
@@ -70,8 +71,8 @@
     $('dates-label').textContent = lbl;
   }
   function resetFilters() {
-    Object.assign(state, { flag: 'all', yearMin: null, yearMax: null, recent: null, other: false, years: false, page: 1 });
-    $('year-min').value = Y0 ?? ''; $('year-max').value = Y1 ?? ''; $('recent').setAttribute('aria-pressed', 'false'); $('other').checked = false; $('years').checked = false;
+    Object.assign(state, { flag: 'all', yearMin: null, yearMax: null, recent: null, other: false, years: false, osm: false, page: 1 });
+    $('year-min').value = Y0 ?? ''; $('year-max').value = Y1 ?? ''; $('recent').setAttribute('aria-pressed', 'false'); $('other').checked = false; $('years').checked = false; $('osm').checked = false;
     readYearInputs(); refresh();
   }
 
@@ -103,7 +104,7 @@
   }
   function renderList() {
     const total = filtered.length, shown = Math.min(total, state.page * PAGE);
-    const active = state.flag !== 'all' || state.yearMin != null || state.yearMax != null || state.recent || state.other || state.years;
+    const active = state.flag !== 'all' || state.yearMin != null || state.yearMax != null || state.recent || state.other || state.years || state.osm;
     $('count').innerHTML = `<span><span class="mono">${shown}</span> of <span class="mono">${total}</span> matching ${state.other ? 'objects' : 'poles'}</span>${active ? '<button id="reset2">Reset filters</button>' : ''}`;
     if (!total) { $('list').innerHTML = `<div class="empty">No poles match these filters. <button class="btn sm" id="reset3">Reset filters</button></div>`; return; }
     $('list').innerHTML = filtered.slice(0, shown).map(rowHtml).join('') + (shown < total ? `<div class="more"><button class="btn sm" id="more">Show more (${total - shown} left)</button></div>` : '');
@@ -212,6 +213,7 @@
       !PP.transformerVisible(r) && fieldLine(xfmrLabel(r), 'xfmr'),
       !PP.attachments3(r) && fieldLine(attLabel(r), 'att'),
       fieldLine(`${esc(L.type[r.type] || r.type)} · ${esc(L.mat[r.material] || r.material)}`, 'type'),
+      D.meta.osm && r.util && `<div class="it"><span>${Number.isFinite(r.osm) ? `Nearest OpenStreetMap pole ${r.osm.toFixed(0)} m away` : 'No OpenStreetMap pole within 25 m'}</span></div>`,
     ].filter(Boolean).join('');
     $('detail').innerHTML = `
       <div class="detail-h"><button class="btn sm" id="back" aria-label="Back to list">← List</button><span class="id">${esc(r.id)}</span><span class="pos" id="pos"></span>
@@ -368,6 +370,7 @@
     $('reset').addEventListener('click', () => { resetFilters(); toggleMenu('dates-btn', 'dates-menu', false); });
     $('other').addEventListener('change', e => { state.other = e.target.checked; state.flag = 'all'; refresh(); if (mapApi) mapApi.recolor(); });
     $('years').addEventListener('change', e => { state.years = e.target.checked; refresh(); });
+    $('osm').addEventListener('change', e => { state.osm = e.target.checked; refresh(); });
     $('dates-btn').addEventListener('click', () => { toggleMenu('dates-btn', 'dates-menu'); toggleMenu('export-btn', 'export-menu', false); });
     $('export-btn').addEventListener('click', () => { toggleMenu('export-btn', 'export-menu'); toggleMenu('dates-btn', 'dates-menu', false); });
     document.addEventListener('click', e => { if (!e.target.closest('.menu')) { toggleMenu('export-btn', 'export-menu', false); toggleMenu('dates-btn', 'dates-menu', false); } });
@@ -435,6 +438,7 @@
     ['year-min', 'year-max'].forEach(id => { $(id).min = Y0 ?? ''; $(id).max = Y1 ?? ''; });
     $('year-min').value = Y0 ?? ''; $('year-max').value = Y1 ?? '';
     renderSummary();
+    if (D.meta.osm) $('osm-wrap').hidden = false;
     wire();
     readYearInputs();
     refresh();

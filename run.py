@@ -41,6 +41,7 @@ def main():
         return
     step("classify", ["classify.py", "--town", a.town], False)  # its own per-detection cache handles reruns
     step("dedupe", ["dedupe.py", "--town", a.town], False)
+    step("osm", ["osm.py", "--town", a.town], f(f"osm/{slug}/summary.json"))  # one Overpass query, cached forever
     step("report", ["report.py", "--town", a.town, "--contact", a.contact], False)
 
 

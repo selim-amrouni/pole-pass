@@ -33,6 +33,7 @@
       <button class="btn sm" id="recent" aria-pressed="false">Recent photos only</button>
       <div class="h">More</div>
       <label class="chk"><input type="checkbox" id="years"> Photographed in more than one year <span class="mono" id="years-n"></span></label>
+      <label class="chk" id="osm-wrap" hidden><input type="checkbox" id="osm"> Not in OpenStreetMap <span class="mono" id="osm-n"></span></label>
       <label class="chk"><input type="checkbox" id="other"> Show other detected objects instead of poles</label>
       <button class="btn sm" id="reset">Reset filters</button>
     </div>
@@ -94,7 +95,7 @@
   <details><summary>Technical details</summary>{{TECH_DETAILS}}</details>
 
   <h2>What the photos cannot establish</h2>
-  <p>These photos do not establish structural condition, electrical loading, attachment ownership, or compliance. Old, blurred, obstructed, or distorted images can give misleading results. Vegetation contact is judged from overlap in the photo; in wooded areas a branch behind or in front of the pole can read as touching it, and clearance cannot be confirmed from one viewpoint. A record with no model flag has not been cleared by an inspection.</p>
+  <p>These photos do not establish structural condition, electrical loading, attachment ownership, or compliance. Old, blurred, obstructed, or distorted images can give misleading results. Vegetation contact is judged from overlap in the photo; in wooded areas a branch behind or in front of the pole can read as touching it, and clearance cannot be confirmed from one viewpoint. A record with no model flag has not been cleared by an inspection.{{OSM_NOTE}}</p>
 
   <h2>Validation</h2>
   {{VALIDATION_SECTION}}
