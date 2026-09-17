@@ -92,6 +92,22 @@ def needs_redo(cached, leans):
     return cached["result"].get("lean_severity") in leans and cached.get("schema", 1) < SCHEMA_VERSION
 
 
+def supersede(p, cached):
+    """Move a result aside as <id>.v<schema>.json before its rerun; every generation is kept."""
+    p.rename(p.with_suffix(f".v{cached.get('schema', 1)}.json"))
+
+
+def write_drop(res_dir, did, err):
+    """Record a dropped observation. A rerun that fails restores the superseded result instead of losing it to a drop."""
+    p = res_dir / f"{did}.json"
+    old = sorted(res_dir.glob(f"{did}.v*.json"))
+    if old:
+        old[-1].rename(p)
+        return "restored"
+    p.write_text(json.dumps({"detection_id": did, "dropped": err}))
+    return "dropped"
+
+
 def make_crop(obs, crops_dir):
     """Crop around the pole bbox with context, resize, save. Returns (path, (w,h)) or (None, reason)."""
     out = crops_dir / f"{obs['detection_id']}.jpg"
@@ -177,7 +193,7 @@ def main():
     ap.add_argument("--redo-lean", metavar="CALLS", help="comma list, e.g. moderate,severe: resend cached results with these lean calls "
                     "that predate the current schema (old result kept as <id>.v1.json)")
     args = ap.parse_args()
-    redo_leans = {x.strip() for x in args.redo_lean.split(",") if x.strip()} if args.redo_lean else set()
+    redo_leans = {x.strip() for x in args.redo_lean.split(",") if x.strip()} if args.redo_lean and not args.resume else set()
 
     slug = slugify(args.town)
     src = DATA / "fetch" / slug / "observations.jsonl"
@@ -189,7 +205,7 @@ def main():
     res_dir.mkdir(parents=True, exist_ok=True)
 
     # crops + skip list
-    todo, skipped, sizes = [], {}, {}
+    todo, skipped, sizes, redo = [], {}, {}, {}
     for o in obs_all:
         p = res_dir / f"{o['detection_id']}.json"
         if p.exists():
@@ -199,8 +215,7 @@ def main():
                 continue
             if not needs_redo(cached, redo_leans):
                 continue
-            if not args.estimate:
-                p.rename(p.with_suffix(".v1.json"))  # superseded by the rerun; kept for traceability
+            redo[o["detection_id"]] = cached
         path, info = make_crop(o, crops_dir)
         if path is None:
             skipped[o["detection_id"]] = info
@@ -209,6 +224,10 @@ def main():
         sizes[o["detection_id"]] = info
     if args.limit:
         todo = todo[:args.limit]
+    if not args.estimate:  # only what is actually being sent is moved aside, and only once the list is final
+        for o, _ in todo:
+            if o["detection_id"] in redo:
+                supersede(res_dir / f"{o['detection_id']}.json", redo[o["detection_id"]])
     cached_n = sum(1 for o in obs_all if (res_dir / f"{o['detection_id']}.json").exists())
     feats_all = {o["feature_id"] for o in obs_all}
     feats_usable = {o["feature_id"] for o in obs_all if o["detection_id"] not in skipped}
@@ -264,8 +283,8 @@ def run_direct(client, todo, res_dir):
                     break
                 time.sleep(2 ** attempt)
         if rec is None:
-            (res_dir / f"{o['detection_id']}.json").write_text(json.dumps({"detection_id": o["detection_id"], "dropped": err}))
-            print(f"  {k}/{len(todo)} {o['detection_id']} dropped ({err})")
+            what = write_drop(res_dir, o["detection_id"], err)
+            print(f"  {k}/{len(todo)} {o['detection_id']} {what} ({err})")
             continue
         for kk in total:
             total[kk] += usage[kk]
@@ -340,7 +359,7 @@ def collect_batch(client, batch_id, todo, res_dir):
                 continue
             except Exception as e:
                 err = f"{err} then {type(e).__name__}"
-        (res_dir / f"{did}.json").write_text(json.dumps({"detection_id": did, "dropped": err}))
+        write_drop(res_dir, did, err)
         n_bad += 1
     print(f"results: {n_ok} ok, {n_bad} dropped   usage {total}   cost ${cost_usd(total, batch=True):.3f}")
 
