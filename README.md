@@ -31,9 +31,15 @@ territory; Hardwick, Vermont, a backcountry one, selectable in the header).
    It says what OSM lacks, not what the utility's GIS lacks.
 8. `report.py` fills `web/index.html` and copies `web/*.{css,js}` into
    `out/<territory>/` with `data.js`, CSV and GeoJSON exports, and per-photo
-   images. `deploy.sh <slug> [<slug> ...]` pushes those folders to GitHub Pages,
-   one territory per path, with a selector in the header fed by
-   `web/territories.json` (name and kind: city or backcountry).
+   images, plus a small `summary.json` of counts. `deploy.sh <slug> [<slug> ...]`
+   pushes those folders to GitHub Pages, one territory per path, with a
+   selector in the header fed by `web/territories.json` (name and kind: city,
+   suburb, or backcountry). The site root is the landing page from
+   `web/landing/`: what the project is, how it works, and one card per
+   deployed territory rendered from `territories.json`, which deploy.sh
+   assembles from `web/territories.json` and each bundle's `summary.json`.
+   `deploy.sh --dry-run ...` builds the pages tree in a temp dir without
+   pushing, for a local preview.
 
 Push braces (a support pole set at an angle against a straight pole) are a
 common Mapillary utility-pole detection and used to read as a severe lean. The
