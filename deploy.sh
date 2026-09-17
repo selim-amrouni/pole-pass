@@ -15,6 +15,10 @@
 # summary.json under "stats", which the landing page renders as cards. #pole= links on the root
 # are forwarded to the first slug by landing.js.
 set -euo pipefail
+# Loud on failure: this script is usually run with its output piped, and a pipeline without
+# `pipefail` in the CALLER's shell reports the exit code of `tail`, not of this script. A deploy
+# that died mid-push once read as a success because of exactly that.
+trap 'status=$?; [ $status -ne 0 ] && { echo; echo "*** DEPLOY FAILED (exit $status) - gh-pages may be unchanged; check: git ls-remote --heads origin gh-pages"; } >&2' EXIT
 dry=0; only=0
 listed=(); unlisted=(); bucket=listed
 for arg in "$@"; do
@@ -75,8 +79,35 @@ if [ "$dry" = 1 ]; then
 fi
 git -C "$tmp" init -q
 git -C "$tmp" checkout -q --orphan gh-pages
+gitc() { git -C "$tmp" -c user.name="$(git -C "$root" config user.name)" -c user.email="$(git -C "$root" config user.email)" "$@"; }
+# HTTP/1.1 is forced because GitHub fails large pushes under HTTP/2 with "RPC failed; HTTP 400".
+# The temp repo is created fresh each run, so it inherits nothing from the working repo's config.
+gitpush() { git -C "$tmp" -c http.postBuffer=524288000 -c http.version=HTTP/1.1 push "$@"; }
+
+# Uploaded one territory per commit to a STAGING ref, then gh-pages is moved in a single ref
+# update at the end. Two separate problems force this shape:
+#   size  - gh-pages is an orphan branch rebuilt from scratch every deploy, so every byte is a new
+#           object. The whole site is ~600 MB of JPEGs and one push of that reliably died with
+#           "the remote end hung up unexpectedly". Several ~150 MB pushes go through.
+#   order - but pushing those chunks straight at gh-pages publishes a landing page whose territory
+#           links 404 until the last chunk lands. Staging keeps the live branch untouched until
+#           every object is already on the server; the final push moves the ref and transfers
+#           nothing, so the site switches over atomically with no half-built window.
+staging="refs/heads/deploy-staging"
+stamp="$(date -u +%Y-%m-%dT%H:%MZ)"
+for slug in "$@"; do
+  git -C "$tmp" add -A -- "$slug"
+  gitc commit -q -m "deploy $stamp: $slug"
+  echo "uploading $slug ($(du -sh "$tmp/$slug" | cut -f1))..."
+  gitpush -f "$remote" "HEAD:$staging"
+done
 git -C "$tmp" add -A
-git -C "$tmp" -c user.name="$(git -C "$root" config user.name)" -c user.email="$(git -C "$root" config user.email)" \
-  commit -q -m "deploy $* $(date -u +%Y-%m-%dT%H:%MZ)"
-git -C "$tmp" -c http.postBuffer=524288000 push -f "$remote" gh-pages
+gitc commit -q -m "deploy $stamp: site shell"
+echo "uploading site shell..."
+gitpush -f "$remote" "HEAD:$staging"
+
+# Nothing new to transfer here: every object is already on the server from the staged pushes.
+echo "switching gh-pages over..."
+gitpush -f "$remote" "HEAD:refs/heads/gh-pages"
+gitpush "$remote" --delete "$staging" >/dev/null 2>&1 || true
 echo "deployed $* to gh-pages ($(du -sh "$tmp" | cut -f1))"
