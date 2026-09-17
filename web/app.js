@@ -121,7 +121,8 @@
     const total = filtered.length, shown = Math.min(total, state.page * PAGE);
     const act = activeFilters();
     $('count').innerHTML = `<span><span class="mono">${shown}</span> of <span class="mono">${total}</span> ${state.other ? 'objects' : 'poles'}</span>${act.length ? '<button id="reset2">Reset filters</button>' : ''}`;
-    $('active').hidden = !act.length;
+    const wasHidden = $('active').hidden; $('active').hidden = !act.length;
+    if (wasHidden !== $('active').hidden && state.sizeWs) state.sizeWs();  // the line above the workspace changes the height available to it
     $('active').innerHTML = act.length ? `<span>Showing: ${act.map(esc).join(' · ')} · <span class="mono">${total}</span> ${state.other ? 'objects' : 'poles'}</span><button class="btn sm" id="reset4">Reset</button>` : '';
     if (!total) { $('list').innerHTML = `<div class="empty">No ${state.other ? 'objects' : 'poles'} match these filters. <button class="btn sm" id="reset3">Reset filters</button></div>`; return; }
     $('list').innerHTML = filtered.slice(0, shown).map(rowHtml).join('') + (shown < total ? `<div class="more"><button class="btn sm" id="more">Show more (${total - shown} left)</button></div>` : '');
