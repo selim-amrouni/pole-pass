@@ -58,6 +58,11 @@ initialization without a map library; `uv run python3 -m unittest discover -s te
 covers the tilt estimator, the grading CSV round trip, the classifier's
 `--redo-lean` selection, and the OSM matcher.
 
+`merge_check.py` serves a local page for issue #5: a sample of records that
+dedupe.py merged from several Mapillary features, one column of crops per
+feature, and same / different / unsure buttons; `--score` prints the
+over-merge rate from `data/validate/<slug>/merges.csv`.
+
 `costs.py` sums API spend per territory from the cached result files,
 splitting batch from direct and current from superseded results.
 
