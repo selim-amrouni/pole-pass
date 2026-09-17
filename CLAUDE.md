@@ -70,9 +70,13 @@ to its source photo.
 - Classifier: `claude-sonnet-5` through the Batches API. Haiku 4.5 is the
   cost fallback per field once precision is graded.
 - Public webapp on GitHub Pages: one bundle per territory under `/<slug>/`,
-  listed in `web/territories.json` with a kind (city or backcountry) so the
-  header can brand the contrast. Greenpoint (city) and Hardwick VT (backcountry)
-  as of 2026-09-16. Deploy with `./deploy.sh <slug> [<slug> ...]`. Further
+  listed in `web/territories.json` with a kind (city, suburb, or backcountry)
+  so the header can brand the contrast. Greenpoint (city), Hardwick VT
+  (backcountry), Reading MA (suburb) as of 2026-09-17. The root is a general
+  landing page (`web/landing/`) with one card per territory, fed by
+  `territories.json` = `web/territories.json` entries + each bundle's
+  `out/<slug>/summary.json` (written by report.py). Deploy with
+  `./deploy.sh <slug> [<slug> ...]`; `--dry-run` previews. Further
   territories run on request.
 - Never commit `.env`.
 

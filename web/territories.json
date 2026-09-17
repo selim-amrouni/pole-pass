@@ -1,4 +1,5 @@
 [
   {"slug": "greenpoint-brooklyn-new-york", "name": "Greenpoint, Brooklyn", "kind": "city"},
-  {"slug": "hardwick-vermont", "name": "Hardwick, Vermont", "kind": "backcountry"}
+  {"slug": "hardwick-vermont", "name": "Hardwick, Vermont", "kind": "backcountry"},
+  {"slug": "reading-massachusetts", "name": "Reading, Massachusetts", "kind": "suburb"}
 ]

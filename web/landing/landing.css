@@ -1,0 +1,55 @@
+/* Pole Pass landing page. Tokens copied from web/style.css so the root page and the territory pages read as one thing; keep them in sync. */
+:root {
+  --bg: #f4f4f2; --panel: #ffffff; --ink: #1c1c1a; --ink-2: #4b4b47; --ink-3: #6b6b66; --line: #d8d8d3; --line-2: #ebebe7;
+  --accent: #1b5e8a; --accent-bg: #e6f0f7; --issue: #c2410c; --issue-bg: #fdf0e8; --issue-line: #efc9b6;
+  --warn: #9a6a00; --warn-bg: #fbf3df; --warn-line: #e9d59f;
+  --ok: #3f6b2a; --focus: #1b5e8a;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace; --serif: "Fraunces", Georgia, serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); overflow-x: clip; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mono { font-family: var(--mono); font-size: .93em; } .muted { color: var(--ink-3); } .small { font-size: 12.5px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); cursor: pointer; text-decoration: none; color: var(--ink); font-size: 14px; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.hdr { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 20px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.brand { font-family: var(--serif); font-size: 21px; font-weight: 500; letter-spacing: -.01em; }
+.hdr nav { display: flex; gap: 6px; flex-wrap: wrap; }
+
+main { max-width: 960px; margin: 0 auto; padding: 8px 20px 40px; }
+.hero { padding: 36px 0 20px; max-width: 72ch; }
+h1 { font-family: var(--serif); font-weight: 500; font-size: clamp(26px, 4vw, 38px); line-height: 1.15; letter-spacing: -.01em; margin: 0 0 14px; }
+h2 { font-size: 19px; font-weight: 600; margin: 32px 0 8px; }
+.lede { font-size: 17px; color: var(--ink-2); margin: 0 0 14px; }
+.notice { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn); border-radius: 6px; padding: 9px 12px; font-size: 14px; margin: 0; }
+
+.areas p { margin: 0 0 12px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.card { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; color: inherit; text-decoration: none; }
+.card:hover { border-color: var(--ink-3); }
+.card .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.card .name { font-family: var(--serif); font-size: 19px; font-weight: 500; }
+.kind { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-3); white-space: nowrap; }
+.kind.city { background: var(--accent-bg); border-color: #c5d9e8; color: var(--accent); }
+.kind.backcountry { background: #e9f1e4; border-color: #c3d8b8; color: var(--ok); }
+.kind.suburb { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 0; }
+.stats div { display: flex; flex-direction: column; }
+.stats dt { font-size: 12px; color: var(--ink-3); order: 2; }
+.stats dd { margin: 0; font-family: var(--mono); font-size: 17px; order: 1; }
+.stats dd.issue { color: var(--issue); } .stats dd.warn { color: var(--warn); }
+.card .open { margin-top: 10px; font-size: 14px; color: var(--accent); }
+.card .gen { margin-top: 6px; }
+.empty { color: var(--ink-3); border: 1px dashed var(--line); border-radius: 8px; padding: 18px; }
+
+.prose { max-width: 72ch; }
+.prose p { margin: 0 0 12px; }
+.steps { padding-left: 20px; margin: 0; } .steps li { margin-bottom: 10px; }
+.foot { max-width: 960px; margin: 0 auto; padding: 16px 20px 32px; border-top: 1px solid var(--line-2); color: var(--ink-2); }
+.foot p { margin: 4px 0; }
+@media (max-width: 600px) { .hero { padding-top: 22px; } .hdr nav .btn { padding: 4px 9px; } }
