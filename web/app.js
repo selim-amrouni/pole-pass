@@ -10,7 +10,7 @@
 
   // ---------- labels ----------
   const L = {
-    type: { wood_utility: 'Wood utility pole', concrete_or_steel_utility: 'Concrete or steel utility pole', street_light: 'Street light pole', traffic_signal: 'Traffic signal pole', other: 'Other object', unclear: 'Pole type unclear' },
+    type: { wood_utility: 'Wood utility pole', concrete_or_steel_utility: 'Concrete or steel utility pole', street_light: 'Street light pole', traffic_signal: 'Traffic signal pole', push_brace: 'Push brace (support pole)', other: 'Other object', unclear: 'Pole type unclear' },
     lean: { none: 'No lean visible', slight: 'Slight lean', moderate: 'Possible lean (moderate)', severe: 'Possible lean (severe)', unclear: 'Lean: cannot tell' },
     xarm: { none_visible: 'No crossarm visible', intact: 'Crossarm looks intact', damaged: 'Possible crossarm damage', unclear: 'Crossarm: cannot tell' },
     veg: { none: 'No vegetation contact', near: 'Vegetation nearby', touching: 'Possible vegetation contact', unclear: 'Vegetation: cannot tell' },

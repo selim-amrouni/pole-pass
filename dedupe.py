@@ -39,7 +39,7 @@ TIE_ORDER = {  # index 0 wins ties (conservative)
     "lean_severity": ["unclear", "none", "slight", "moderate", "severe"],
     "crossarm_condition": ["unclear", "none_visible", "intact", "damaged"],
     "vegetation_contact": ["unclear", "none", "near", "touching"],
-    "pole_type": ["unclear", "other", "traffic_signal", "street_light", "concrete_or_steel_utility", "wood_utility"],
+    "pole_type": ["unclear", "other", "push_brace", "traffic_signal", "street_light", "concrete_or_steel_utility", "wood_utility"],
     "material": ["unclear", "wood", "concrete", "steel", "fiberglass"],
 }
 UTILITY_TYPES = {"wood_utility", "concrete_or_steel_utility"}

@@ -29,7 +29,7 @@ First three candidates (Tier 1, P1 call first, Not contacted, compact territory)
 - [x] Dedupe on full data: 865 poles, 620 utility, 183 merged from multiple features
 - [x] Report rendered on full data (29.8 MB bundle, 865 crops)
 - [ ] Open in browser, iterate on the page
-- [ ] CTA contact link (needs user's choice)
+- [x] CTA contact link: report.py DEFAULT_CONTACT is mailto:selim.amrouni@gmail.com in both deployed bundles (confirmed 2026-09-16)
 - [x] GitHub repo https://github.com/selim-amrouni/pole-pass (public, MIT) + Pages at https://selim-amrouni.github.io/pole-pass/ via deploy.sh
 - [x] 16 issues filed for known problems and deferred work
 - [ ] Stretch: Overpass diff vs OSM power=pole
@@ -110,3 +110,11 @@ Chester MA 225; Lake Placid 117; Tupper Lake 119. Hardwick picked; newest photos
 - Vegetation "touching" in the woods means canopy overlap in the photo; copy now says so.
 - Severe lean: 3 records; hard-00011 is a push brace (issue #22). The other two need a look.
 - Total API spend for Hardwick: $11.71.
+
+## Third pass (plan approved 2026-09-16): OSM diff, push brace, landing page, Reading MA, writeup
+Plan: ~/.claude/plans/resilient-roaming-stallman.md. Four branches, PR each into main.
+- [ ] 1. fix/push-brace: push_brace pole_type (schema 2), classify --redo-lean moderate,severe in direct mode for both territories, dedupe tie order, page copy, test; close #22 with before/after severe counts
+- [ ] 2. feature/osm-diff: osm.py (Overpass power=pole + man_made=utility_pole, cached under data/osm/<slug>/), nearest-OSM-node per utility record, page filter "Not in OpenStreetMap", exports column, attribution; close #13
+- [ ] 3. feature/landing: web/landing/ root page fed by territories.json with per-bundle summary.json stats, deploy.sh copies it, suburb kind, About copy templated by location
+- [ ] 4. feature/reading: run.py gains locate/tilt/osm steps, Reading MA run (~$15), review, deploy all three
+- [ ] 5. docs/writeup.md, every number with its data/ path

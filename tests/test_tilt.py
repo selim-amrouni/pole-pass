@@ -11,6 +11,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from grade import load_sample, valid_value, write_sample  # noqa: E402
+from classify import SCHEMA_VERSION, needs_redo, supersede, write_drop  # noqa: E402
+import json  # noqa: E402
 from tilt import apparent_tilt  # noqa: E402
 
 
@@ -75,6 +77,33 @@ class GradeCsvTest(unittest.TestCase):
         self.assertTrue(valid_value("truth_is_utility_pole", "n")); self.assertFalse(valid_value("truth_is_utility_pole", "yes"))
         self.assertTrue(valid_value("truth_attachment_count", "3")); self.assertFalse(valid_value("truth_attachment_count", "3.5"))
         self.assertTrue(valid_value("grader_notes", "free text")); self.assertFalse(valid_value("grader_notes", "x" * 2001))
+
+
+class RedoLeanTest(unittest.TestCase):
+    """--redo-lean resends only old-schema results whose lean call is listed; dropped rows and current results stay cached."""
+
+    def test_selection(self):
+        old_sev = {"result": {"lean_severity": "severe"}}
+        old_mod = {"result": {"lean_severity": "moderate"}, "schema": 1}
+        old_none = {"result": {"lean_severity": "none"}}
+        new_sev = {"result": {"lean_severity": "severe"}, "schema": SCHEMA_VERSION}
+        dropped = {"dropped": "pole_too_small"}
+        leans = {"moderate", "severe"}
+        self.assertTrue(needs_redo(old_sev, leans)); self.assertTrue(needs_redo(old_mod, leans))
+        self.assertFalse(needs_redo(old_none, leans)); self.assertFalse(needs_redo(new_sev, leans))
+        self.assertFalse(needs_redo(dropped, leans)); self.assertFalse(needs_redo(old_sev, set()))
+
+    def test_supersede_keeps_every_generation_and_a_failed_rerun_restores(self):
+        with tempfile.TemporaryDirectory() as d:
+            res = Path(d); p = res / "42.json"
+            p.write_text(json.dumps({"result": {"lean_severity": "severe"}}))
+            supersede(p, json.loads(p.read_text()))
+            self.assertFalse(p.exists()); self.assertTrue((res / "42.v1.json").exists())
+            self.assertEqual(write_drop(res, "42", "api:500"), "restored")
+            self.assertEqual(json.loads(p.read_text())["result"]["lean_severity"], "severe"); self.assertFalse((res / "42.v1.json").exists())
+            p.write_text(json.dumps({"result": {}, "schema": 2})); supersede(p, json.loads(p.read_text()))
+            self.assertTrue((res / "42.v2.json").exists())
+            self.assertEqual(write_drop(res, "7", "malformed"), "dropped"); self.assertTrue(json.loads((res / "7.json").read_text())["dropped"])
 
 
 if __name__ == "__main__":
