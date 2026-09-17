@@ -10,8 +10,8 @@ Writes data/poles/<slug>/poles.jsonl      one row per pole record
 
 Grouping (estimates, not verified):
   1. Frames that Mapillary attributes to the same map feature merge first.
-  2. Features whose points are within --radius meters merge (single linkage on
-     a grid). Mapillary sometimes emits two features for one pole; the radius
+  2. Features whose points are all within --radius meters of each other merge
+     (complete linkage on a grid; no chaining through intermediates). Mapillary sometimes emits two features for one pole; the radius
      can also merge distinct nearby objects or leave duplicates.
 
 Per field: majority vote over classified frames, ties toward the more
@@ -71,27 +71,38 @@ def haversine_m(lon1, lat1, lon2, lat2):
 
 
 def cluster(points, radius_m):
+    """Group features whose every pairwise distance is within radius_m (complete linkage; no chaining).
+
+    Single linkage chained features 25 to 30 m apart into one record through intermediates; a hand check of 29
+    merged Reading records found 24% over-merges, worst in those chains (issue #5). Pairs are merged closest
+    first, and a merge is refused unless every cross-pair is within the radius. Deterministic for a given input.
+    Returns {feature_id: cluster index}."""
     cell = radius_m / 111320.0
     grid = defaultdict(list)
     for pid, (lon, lat) in points.items():
         grid[(int(lon / cell), int(lat / cell))].append(pid)
-    parent = {pid: pid for pid in points}
-
-    def find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
+    pairs = []
     for (gx, gy), ids in grid.items():
         neighbors = [p for dx in (-1, 0, 1) for dy in (-1, 0, 1) for p in grid.get((gx + dx, gy + dy), [])]
         for a in ids:
             la, pa = points[a]
             for b in neighbors:
-                if a < b and haversine_m(la, pa, *points[b]) <= radius_m:
-                    parent[find(a)] = find(b)
+                if a < b:
+                    d = haversine_m(la, pa, *points[b])
+                    if d <= radius_m:
+                        pairs.append((d, a, b))
+    members = {pid: {pid} for pid in points}  # cluster id -> members; every pid starts as its own cluster
+    of = {pid: pid for pid in points}
+    for _, a, b in sorted(pairs):
+        ca, cb = of[a], of[b]
+        if ca == cb:
+            continue
+        if all(haversine_m(*points[x], *points[y]) <= radius_m for x in members[ca] for y in members[cb]):
+            for x in members[cb]:
+                of[x] = ca
+            members[ca] |= members.pop(cb)
     roots = {}
-    return {pid: roots.setdefault(find(pid), len(roots)) for pid in points}
+    return {pid: roots.setdefault(of[pid], len(roots)) for pid in sorted(points)}
 
 
 def vote(values, field):

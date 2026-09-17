@@ -143,3 +143,10 @@ Plan: ~/.claude/plans/resilient-roaming-stallman.md. Four branches, PR each into
 - OSM: 189 pole nodes in the bbox (164 power=pole, 25 man_made=utility_pole); 96 of 1,380 detected poles have one within 15 m; 1,284 absent.
 - Example record read-00070 chosen after viewing the crop (whole pole, crossarm, streetlight arm, comm lines, terminal box, no flags).
 - Batch API rejected chunk 2 for duplicate custom_ids (7 detections shared by two features); fixed, lesson recorded. First chunk resumed with --resume.
+
+### Merge check and complete linkage (2026-09-17, data/validate/reading-massachusetts/merges.csv)
+- merge_check.py page; user graded 30 merged Reading records: 22 same, 7 different, 1 unsure -> 24% over-merge (user unsure of some verdicts).
+  Wrong merges: none under 3.5 m; 5 of 15 two-feature merges at 4 to 8 m (opposite sides of a street); chains of 6 to 9 features spanning 25 to 32 m wrong or unsure 3 of 5.
+- Photo-overlap rule tested (outline x-offset in shared photos, 4 m fallback): 22/29 agreement, catches 6/7 over-merges but splits 6 "same" and would add 329 records to Reading. Not adopted (user: no to a second grading round).
+- Shipped: dedupe.py cluster() is complete linkage at 8 m (every pair within radius, closest pairs first). Records 865/1,672/1,519 -> 962/1,731/1,739; utility 619/1,532/1,380 -> 706/1,591/1,589. Severe-lean counts unchanged (10/2/6).
+- Issue #5 stays open for the 4 to 8 m street-side case.
