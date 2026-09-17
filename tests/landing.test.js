@@ -42,6 +42,7 @@ test('empty or missing list shows an empty state, never placeholder numbers', ()
   const el = document.getElementById('cards');
   assert.equal(PL.render([], el), 0); assert.ok(el.innerHTML.includes('No areas are published yet'));
   assert.equal(PL.render(null, el), 0); assert.ok(!/\d/.test(el.innerHTML));
+  assert.equal(PL.render([{ name: 'no slug' }, null], el), 0); assert.ok(el.innerHTML.includes('No areas'), 'entries without a slug do not count');
 });
 
 test('escapes names and forwards #pole= links to the first territory', () => {

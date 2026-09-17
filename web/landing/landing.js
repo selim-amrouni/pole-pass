@@ -31,9 +31,10 @@
   }
 
   function render(list, el) {
-    if (!Array.isArray(list) || !list.length) { el.innerHTML = '<div class="empty">No areas are published yet.</div>'; return 0; }
-    el.innerHTML = list.filter(t => t && t.slug).map(cardHtml).join('');
-    return list.length;
+    const ok = Array.isArray(list) ? list.filter(t => t && typeof t.slug === 'string' && t.slug) : [];
+    if (!ok.length) { el.innerHTML = '<div class="empty">No areas are published yet.</div>'; return 0; }
+    el.innerHTML = ok.map(cardHtml).join('');
+    return ok.length;
   }
 
   // Old root links carried #pole=<id> and were forwarded to the first territory; keep that working.

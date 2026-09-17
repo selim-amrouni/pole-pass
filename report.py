@@ -161,11 +161,12 @@ def bundle_summary(meta, rows, summary, coverage):
     years = [f["year"] for r in util for f in r["frames"] if f.get("year")]
     multi = sum(1 for r in util if len({f["year"] for f in r["frames"] if f.get("year")}) >= 2)
     osm = meta.get("osm")
+    not_in_osm = sum(1 for r in util if not (r.get("osm") is not None and r["osm"] <= osm["headline_m"])) if osm else None  # same rule as predicates.js notInOsm
     return {"slug": meta["slug"], "location": meta["location"], "version": meta["version"], "generated": meta["generated"],
             "counts": {"records": len(rows), "utility": len(util), "condition_issues": sum(1 for r in util if r["flags"]),
                        "warnings": sum(1 for r in util if r["warn"]), "frames_classified": summary["frames_classified"],
                        "photo_year_first": min(years) if years else None, "photo_year_last": max(years) if years else None, "multi_year": multi,
-                       "not_in_osm": osm["not_in_osm"] if osm else None, "osm_nodes": osm["nodes"] if osm else None},
+                       "not_in_osm": not_in_osm, "osm_nodes": osm["nodes"] if osm else None},
             "coverage": {"images": coverage["images"], "area_km2": coverage["area_km2"], "capture_first": coverage.get("capture_first"), "capture_last": coverage.get("capture_last")},
             "sources": {"poles": f"data/poles/{meta['slug']}/summary.json", "coverage": f"data/coverage/{meta['slug']}/summary.json", **({"osm": osm["source"]} if osm else {})}}
 
