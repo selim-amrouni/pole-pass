@@ -20,9 +20,45 @@ Three territories were run to show the contrast between kinds of places:
 | Hardwick, Vermont | backcountry | a state highway videolog every two years, wooded roadsides |
 | Reading, Massachusetts | suburb | a municipal light department on the Public Power pilot list |
 
-## Tables
+## The territories side by side
 
-<!-- filled from data/ after the runs; see the sections below -->
+Sources per row: coverage = `data/coverage/<slug>/summary.json`; poles = `data/poles/<slug>/summary.json`;
+bundle = `out/<slug>/summary.json` (written by report.py from the records); tilt =
+`data/tilt/<slug>/calibration.json`; osm = `data/osm/<slug>/summary.json`; cost = `costs.py`
+(sums the usage stored in every `data/{classify,locate}/<slug>/results/*.json`).
+Slugs: `greenpoint-brooklyn-new-york`, `hardwick-vermont`, `reading-massachusetts`.
+
+| | Greenpoint | Hardwick | Reading | source |
+|---|---:|---:|---:|---|
+| Area, km² | 6.19 | 182.41 | 39.42 | coverage `area_km2` |
+| Mapillary images in bbox | 105,211 | 71,371 | 98,589 | coverage `images` |
+| Images per km² | 17,002 | 391 | 2,501 | coverage `images_per_km2` |
+| Panoramas | 18,372 | 0 | 19,260 | coverage `pano_images` |
+| Capture dates | 2014-08 to 2026-09 | 2013-09 to 2022-11 | 2015-03 to 2026-06 | coverage `capture_first`, `capture_last` |
+| Utility-pole map features | 1,725 | 2,718 | 3,330 | coverage `features_by_value` |
+| Photos assessed | 3,254 | 5,357 | READING | poles `frames_classified` |
+| Records | 865 | 1,672 | READING | poles `records` |
+| Utility poles | 619 | 1,532 | READING | poles `utility_records` |
+| Other detected objects | 246 | 140 | READING | poles `other_records` |
+| Records merged from several features | 183 | 338 | READING | poles `records_merged_from_multiple_features` |
+| Utility poles with a condition issue | 76 | 446 | READING | poles `utility_with_condition_flag` |
+| of which lean (moderate or severe) | 17 | 26 | READING | poles `utility_flag_counts.lean` |
+| of which vegetation touching | 58 | 428 | READING | poles `utility_flag_counts.vegetation` |
+| of which crossarm damaged | 1 | 1 | READING | poles `utility_flag_counts.crossarm` |
+| Severe lean | 10 | 2 | READING | records with `lean_severity == severe` in `data/poles/<slug>/poles.jsonl` |
+| Watch items (slight lean) | 373 | 782 | READING | poles `utility_with_warning_flag` |
+| Transformer visible | 14 | 61 | READING | poles `utility_transformer` |
+| 3+ estimated attachments | 12 | 0 | READING | poles `utility_3plus_attachments` |
+| Push braces | 0 | 2 | READING | poles `records_by_type.push_brace` |
+| Photographed in 2+ years | 23 | 1,108 | READING | bundle `counts.multi_year` |
+| Straight-pole tilt noise, flat photos: median / p90, ° | 2.4 / 7.9 (n=759) | 1.9 / 5.3 (n=2,189) | READING | tilt `by_model_lean_call.none.flat` |
+| Severe-lean photos: median tilt, ° | 8.9 (n=40) | 9.8 (n=18) | READING | tilt `by_model_lean_call.severe.flat` |
+| OSM pole nodes in bbox | 0 | 134 | READING | osm `osm_nodes` |
+| Utility poles with an OSM pole within 15 m | 0 | 0 | READING | osm `detected_with_osm_within_m.15` |
+| API spend, USD | 8.73 | 12.28 | READING | costs.py |
+
+Watch items are common (slight lean on more than half the poles in both places) and the page
+never counts them as issues. Vegetation dominates Hardwick's issues for the reason given below.
 
 ## What changed the results
 

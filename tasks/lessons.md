@@ -46,3 +46,11 @@
   all up front so they process in parallel. Pattern: any "one request per
   image" batch needs a size cap before the first territory bigger than the
   demo.
+
+- **Two Mapillary map features can share the same detection ids** (duplicate
+  features a few meters apart; 7 of 9,987 Reading observations). The Batches
+  API rejects duplicate custom_ids for the whole chunk, after the first chunk
+  was already accepted. classify.py and locate.py now send one request per
+  detection id. Pattern: any per-entity request list built from a join needs a
+  uniqueness check before submission; Greenpoint and Hardwick happened to have
+  none.
