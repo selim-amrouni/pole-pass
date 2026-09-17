@@ -22,6 +22,10 @@
   const spansYears = r => frameYears(r).length >= 2;
   // All three condition fields unreadable: the model could not assess condition from any photo.
   const conditionUnclear = r => r.lean === 'unclear' && r.xarm === 'unclear' && r.veg === 'unclear';
+  // r.osm: distance in m to the nearest OpenStreetMap pole node within 25 m (osm.py), null when none, absent when OSM was not checked.
+  // "Not in OSM" uses the 15 m headline radius: a utility record with no OSM pole within it. Mirrors osm.py HEADLINE_M.
+  const OSM_HEADLINE_M = 15;
+  const notInOsm = r => isUtility(r) && !(Number.isFinite(r.osm) && r.osm <= OSM_HEADLINE_M);
 
   const FILTERS = {
     all: r => true,
@@ -42,6 +46,7 @@
       if (state.yearMax != null && (r.shown.year == null || r.shown.year > state.yearMax)) return false;
       if (state.recent && (r.shown.year == null || r.shown.year < state.recent)) return false;
       if (state.years && !spansYears(r)) return false;
+      if (state.osm && !notInOsm(r)) return false;
       return true;
     });
   }
@@ -56,6 +61,7 @@
       conditionIssues: util.filter(hasConditionIssue).length,
       warnings: util.filter(hasWarning).length,
       spansYears: util.filter(spansYears).length,
+      notInOsm: util.filter(notInOsm).length,
       attachments3: util.filter(attachments3).length,
       transformer: util.filter(transformerVisible).length,
       lean: util.filter(possibleLean).length,
@@ -75,5 +81,5 @@
   };
 
   return { isUtility, possibleLean, crossarmDamage, vegetationContact, transformerVisible, attachments3,
-           conditionFlags, hasConditionIssue, leanWarning, warningFlags, hasWarning, conditionUnclear, frameYears, spansYears, FILTERS, applyFilters, summary, SORTS };
+           conditionFlags, hasConditionIssue, leanWarning, warningFlags, hasWarning, conditionUnclear, frameYears, spansYears, notInOsm, OSM_HEADLINE_M, FILTERS, applyFilters, summary, SORTS };
 });

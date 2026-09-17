@@ -24,11 +24,24 @@ territory; Hardwick, Vermont, a backcountry one, selectable in the header).
 6. `tilt.py` measures the apparent tilt of each pole outline in each photo and
    calibrates it against the model's own lean calls (`--calibrate`), so the
    page can say how far from vertical a straight pole reads.
-7. `report.py` fills `web/index.html` and copies `web/*.{css,js}` into
+7. `osm.py` asks Overpass for OpenStreetMap pole nodes (`power=pole`,
+   `man_made=utility_pole`) in the same bounding box, once, and reports how
+   many detected poles have none within 8, 15, and 25 m. The page gets a
+   "Not in OpenStreetMap" filter and the exports a `nearest_osm_pole_m` column.
+   It says what OSM lacks, not what the utility's GIS lacks.
+8. `report.py` fills `web/index.html` and copies `web/*.{css,js}` into
    `out/<territory>/` with `data.js`, CSV and GeoJSON exports, and per-photo
    images. `deploy.sh <slug> [<slug> ...]` pushes those folders to GitHub Pages,
    one territory per path, with a selector in the header fed by
    `web/territories.json` (name and kind: city or backcountry).
+
+Push braces (a support pole set at an angle against a straight pole) are a
+common Mapillary utility-pole detection and used to read as a severe lean. The
+classifier labels them `push_brace`; they are listed under other detected
+objects and never flagged. Greenpoint and Hardwick were classified before that
+label existed, so only their moderate and severe lean calls were resent
+(`classify.py --redo-lean moderate,severe`); the old results stay as
+`<id>.v<schema>.json`.
 
 Flags come in two tiers. Possible condition issues (lean moderate or severe,
 crossarm damaged, vegetation touching) are orange. Watch items (slight lean)
@@ -36,9 +49,10 @@ are amber and never counted as issues.
 
 Tests: `node --test tests/*.test.js` covers the shared filter predicates and
 initialization without a map library; `uv run python3 -m unittest discover -s tests`
-covers the tilt estimator and the grading CSV round trip.
+covers the tilt estimator, the grading CSV round trip, the classifier's
+`--redo-lean` selection, and the OSM matcher.
 
-`run.py` chains 1 through 6. Everything caches under `data/`; a rerun makes no
+`run.py` chains 1 through 8. Everything caches under `data/`; a rerun makes no
 API calls.
 
 ## Setup

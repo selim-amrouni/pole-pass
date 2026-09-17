@@ -30,8 +30,11 @@ to its source photo.
    crossarm_condition, transformer_present, vegetation_contact,
    attachment_count, confidence, notes. pole_type separates real utility
    poles from street-light and traffic-signal poles that Mapillary lumps
-   into its utility-pole class. Batch it, cache responses keyed by
-   image id, on malformed JSON retry once then drop the row.
+   into its utility-pole class, and `push_brace` for the angled support
+   poles Mapillary also detects (schema 2; `--redo-lean moderate,severe`
+   resends old-schema lean calls, keeping the old result as `<id>.v<schema>.json`).
+   Batch it, cache responses keyed by image id, on malformed JSON retry once
+   then drop the row.
 4. `dedupe.py` cluster detections within a few meters across consecutive
    frames, majority vote per field, keep disagreement rate as a column.
 5. `validate.py` sample 50 poles, write a CSV for hand grading, compute
@@ -49,8 +52,12 @@ to its source photo.
    `warning_flags()` in dedupe.py. Two tiers: issue (orange) and watch (amber,
    slight lean only). Tests: `node --test tests/*.test.js` and `uv run python3 -m unittest discover -s tests`.
 
-Stretch: diff against OpenStreetMap `power=pole` in the same bbox via Overpass
-and report how many detected assets are absent from OSM.
+8. `osm.py` Overpass query for `power=pole` and `man_made=utility_pole` nodes in
+   the bbox, cached forever under `data/osm/<slug>/`; nearest node per utility
+   record at 8/15/25 m, 15 m is the headline. report.py adds `meta.osm`, a
+   per-record `osm` distance, the "Not in OpenStreetMap" filter, and the OSM
+   attribution only when the diff exists. Zero OSM poles is a real result
+   (Greenpoint has none), not an error.
 
 ## Constraints
 - No model training, no GPU.

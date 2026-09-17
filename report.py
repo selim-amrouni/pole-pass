@@ -36,6 +36,7 @@ OUT = ROOT / "out"
 CROP_PX, FRAME_PX = 640, 560
 ATTRIBUTION = ("Imagery and detections © Mapillary contributors, CC BY-SA 4.0. Derived data ODbL. "
                "Basemap © OpenStreetMap contributors.")
+OSM_ATTRIBUTION = "OSM pole comparison © OpenStreetMap contributors, ODbL."
 DEFAULT_CONTACT = "mailto:selim.amrouni@gmail.com"
 DEFAULT_EXAMPLE = {"greenpoint-brooklyn-new-york": "gree-00062"}  # chosen after viewing the photo: whole pole, clear, unremarkable
 
@@ -101,7 +102,24 @@ def load_marks(slug):
     return out
 
 
-def build_records(poles, out_dir, polygons, marks):
+def load_osm(slug, utility_ids):
+    """(meta, {pole_id: nearest OSM pole distance in m or None}) from osm.py, or (None, {}) when the diff has not run.
+
+    Pole ids are renumbered by every dedupe run, so a match file must cover exactly the current utility ids; otherwise stop."""
+    d = DATA / "osm" / slug
+    if not (d / "summary.json").exists() or not (d / "matches.jsonl").exists():
+        return None, {}
+    s = json.loads((d / "summary.json").read_text())
+    dist = {m["pole_id"]: m["distance_m"] for m in map(json.loads, (d / "matches.jsonl").open())}
+    if set(dist) != set(utility_ids):
+        sys.exit(f"{d.relative_to(ROOT)} is stale for the current pole ids (dedupe ran since); rerun osm.py first")
+    meta = {"nodes": s["osm_nodes"], "by_tag": s["osm_nodes_by_tag"], "utility": s["detected_utility"], "with": s["detected_with_osm_within_m"],
+            "headline_m": s["headline_radius_m"], "not_in_osm": s["detected_without_osm_within_headline"],
+            "osm_unmatched": s["osm_without_detected_within_headline"], "fetched_at": (s.get("fetched_at") or "")[:10] or None, "source": str((d / "summary.json").relative_to(ROOT))}
+    return meta, dist
+
+
+def build_records(poles, out_dir, polygons, marks, osm_dist=None):
     rows = []
     for p in poles:
         shown_img = f"crops/{p['pole_id']}.jpg" if resized(p.get("best_crop"), out_dir / "crops" / f"{p['pole_id']}.jpg", CROP_PX) else None
@@ -132,29 +150,31 @@ def build_records(poles, out_dir, polygons, marks):
             "latest": {"date": ms_date(p.get("latest_available_at")), "ts": p.get("latest_available_at"), "year": ms_year(p.get("latest_available_at")),
                        "url": p.get("latest_available_url"), "classified": p.get("latest_available_classified")},
             "frames": frames,
+            **({"osm": osm_dist.get(p["pole_id"])} if osm_dist is not None and p["is_utility_pole"] else {}),
         })
     return rows
 
 
-def write_all_exports(rows, out_dir):
-    fc = {"type": "FeatureCollection", "license": "ODbL 1.0", "attribution": ATTRIBUTION,
+def write_all_exports(rows, out_dir, attribution):
+    osm = lambda r: "" if r.get("osm") is None else r["osm"]
+    fc = {"type": "FeatureCollection", "license": "ODbL 1.0", "attribution": attribution,
           "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [r["lon"], r["lat"]]},
                         "properties": {"id": r["id"], "is_utility_pole": r["util"], "pole_type": r["type"], "model_flags": r["flags"], "model_watch": r["warn"],
                                        "lean": r["lean"], "crossarm": r["xarm"], "vegetation": r["veg"], "transformer": r["xfmr"],
                                        "attachments_estimate": r["att"], "photos_assessed": r["n"], "capture_sequences": r["seq"],
                                        "photo_shown_date": r["shown"]["date"], "latest_available_photo_date": r["latest"]["date"],
-                                       "source_photo_url": r["shown"]["url"]}} for r in rows]}
+                                       "source_photo_url": r["shown"]["url"], "nearest_osm_pole_m": r.get("osm")}} for r in rows]}
     (out_dir / "poles.geojson").write_text(json.dumps(fc))
     cols = ["id", "lat", "lon", "is_utility_pole", "pole_type", "model_flags", "model_watch", "lean", "crossarm", "vegetation", "transformer",
-            "attachments_estimate", "photos_assessed", "capture_sequences", "photo_shown_date", "latest_available_photo_date", "source_photo_url"]
+            "attachments_estimate", "photos_assessed", "capture_sequences", "photo_shown_date", "latest_available_photo_date", "source_photo_url", "nearest_osm_pole_m"]
     with (out_dir / "poles.csv").open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(cols)
         for r in rows:
             w.writerow([r["id"], r["lat"], r["lon"], r["util"], r["type"], ";".join(r["flags"]), ";".join(r["warn"]), r["lean"], r["xarm"], r["veg"], r["xfmr"],
-                        "" if r["att"] is None else r["att"], r["n"], r["seq"], r["shown"]["date"] or "", r["latest"]["date"] or "", r["shown"]["url"]])
+                        "" if r["att"] is None else r["att"], r["n"], r["seq"], r["shown"]["date"] or "", r["latest"]["date"] or "", r["shown"]["url"], osm(r)])
         w.writerow([])
-        w.writerow([ATTRIBUTION])
+        w.writerow([attribution])
 
 
 def validation_blocks(precision):
@@ -177,7 +197,7 @@ def validation_blocks(precision):
     return notice, section, f"{precision['graded_poles']} records reviewed by hand"
 
 
-def tech_details(summary, coverage, method, tilt_meta=None):
+def tech_details(summary, coverage, method, tilt_meta=None, osm=None):
     return f"""
 <ul>
 <li>Coverage: Mapillary vector tiles at zoom 14 for the bounding box {', '.join(f'{v:.4f}' for v in coverage['bbox'])}: {coverage['images']:,} images and {coverage['map_features']:,} map features, of which {coverage['pole_like_features']:,} are pole-like classes. Captures span {coverage['capture_first']} to {coverage['capture_last']} for the whole image pool; the dates shown on records are the dates of the photos actually assessed.</li>
@@ -190,6 +210,7 @@ def tech_details(summary, coverage, method, tilt_meta=None):
 <li>Positions on photos: a second model pass (same model, one request per assessed photo) was given the crop with a faint labeled grid and the earlier assessment, and asked for the position of the pole top and base, each counted attachment, the transformer, crossarm damage, and vegetation contact. These are approximate model estimates of where something appears in the photo, shown as markers you can hide. They are not measurements and were not verified.</li>
 <li>Apparent tilt: for each assessed photo, the angle of Mapillary's pole outline from the image vertical (medial axis of the outline, 12 scanlines, least squares). It is a property of the photo, not a measurement of the pole: camera roll, perspective, and a lean toward or away from the camera all distort it.{f" {'Flat photos' if tilt_meta['kind'] == 'flat' else 'Photos'} the model called straight read a median of {tilt_meta['none_median']}° and up to {tilt_meta['none_p90']}° at the 90th percentile ({tilt_meta['none_n']:,} photos); panoramas read noisier." if tilt_meta else ""}</li>
 <li>Push braces: a support pole set at a steep angle against a straight pole is a common Mapillary utility-pole detection and reads as a severe lean. The model labels these as push braces, listed under other detected objects and never flagged for lean. For Greenpoint and Hardwick the label was applied by resending only the photos the first pass had called moderate or severe (schema 2, 2026-09-16); later territories use it throughout.</li>
+{f"<li>OpenStreetMap: Overpass returned {osm['nodes']:,} pole nodes (power=pole or man_made=utility_pole) in the same bounding box. {osm['with']['15']:,} of the {osm['utility']:,} utility poles here have one within 15 m ({osm['with']['8']:,} within 8 m, {osm['with']['25']:,} within 25 m), so {osm['not_in_osm']:,} are absent from OSM at 15 m; {osm['osm_unmatched']:,} OSM poles have no detected pole within 15 m (off the photographed streets, or missed). Positions on both sides are approximate.{f" Fetched {osm['fetched_at']}." if osm['fetched_at'] else ""}</li>" if osm else ""}
 <li>Possible condition issue: lean moderate or severe, or crossarm damaged, or vegetation touching. Watch item: slight lean, one tier below an issue; it is common ({summary['utility_with_warning_flag']} of {summary['utility_records']} utility poles) and often within the noise of camera angle. Transformers and attachment counts are not condition issues. Attachment count is the number of visible non-electric items the model counted on the pole; it does not identify owners, tenants, or billing status. Coordinates are averaged detection positions, not surveyed.</li>
 </ul>"""
 
@@ -232,7 +253,9 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     marks = load_marks(slug)
-    rows = build_records(poles, out_dir, load_polygons(slug), marks)
+    osm_meta, osm_dist = load_osm(slug, [p["pole_id"] for p in poles if p["is_utility_pole"]])
+    attribution = f"{ATTRIBUTION} {OSM_ATTRIBUTION}" if osm_meta else ATTRIBUTION
+    rows = build_records(poles, out_dir, load_polygons(slug), marks, osm_dist if osm_meta else None)
     version = hashlib.sha1(json.dumps([{k: v for k, v in r.items() if k not in ("shown", "frames")} for r in rows], sort_keys=True).encode()).hexdigest()[:8]
     example = args.example or DEFAULT_EXAMPLE.get(slug)
     if example and example not in {r["id"] for r in rows}:
@@ -244,10 +267,10 @@ def main():
     generated = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
     meta = {"slug": slug, "location": "Greenpoint, Brooklyn" if slug.startswith("greenpoint") else args.town, "version": version, "generated": generated,
             "contact": args.contact or None, "example_id": example, "bbox": [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
-            "center": [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], "method": method, "attribution": ATTRIBUTION, "tilt": tilt_meta,
+            "center": [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], "method": method, "attribution": attribution, "tilt": tilt_meta, "osm": osm_meta,
             "counts": {"records": len(rows), "utility": sum(r["util"] for r in rows), "frames_classified": summary["frames_classified"]}}
     (out_dir / "data.js").write_text("window.POLE_DATA=" + json.dumps({"meta": meta, "records": rows}, separators=(",", ":")) + ";")
-    write_all_exports(rows, out_dir)
+    write_all_exports(rows, out_dir, attribution)
     for f in ("style.css", "app.js", "predicates.js"):
         shutil.copy(WEB / f, out_dir / f)
 
@@ -257,8 +280,9 @@ def main():
                        f"<p><a class=\"btn primary\" href=\"{args.contact}\">Contact Selim</a></p>") if args.contact else ""
     html = render((WEB / "index.html").read_text(), {
         "LOCATION": meta["location"], "GENERATED": generated, "VERSION": version, "VALIDATION_NOTICE": notice, "VALIDATION_SHORT": vshort,
-        "VALIDATION_SECTION": vsection, "TECH_DETAILS": tech_details(summary, coverage, method, tilt_meta),
-        "CONTACT_NAV": contact_nav, "CONTACT_SECTION": contact_section, "ATTRIBUTION": ATTRIBUTION,
+        "VALIDATION_SECTION": vsection, "TECH_DETAILS": tech_details(summary, coverage, method, tilt_meta, osm_meta),
+        "CONTACT_NAV": contact_nav, "CONTACT_SECTION": contact_section, "ATTRIBUTION": attribution,
+        "OSM_NOTE": " The OpenStreetMap comparison only says which poles OSM volunteers have mapped; it is not the utility's own records, and OSM pole coverage is sparse in most towns." if osm_meta else "",
         "BUILD": hashlib.sha1(b"".join((WEB / f).read_bytes() for f in ("style.css", "app.js", "predicates.js")) + version.encode()).hexdigest()[:8],
     })
     (out_dir / "index.html").write_text(html)
