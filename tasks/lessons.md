@@ -98,3 +98,42 @@ switching a global mode, and deploy refuses to run when a listed-and-built terri
 the command, unless `--only` is passed. Caught only because the user asked "will I have the town on
 the website?" — a question about intent, not code, which is exactly the kind that finds this class
 of bug.
+
+## Verify the outcome, not the mechanism (2026-09-17)
+Three failures in a row deploying Marblehead, one cause. Each time I checked
+whether the *step* reported success instead of whether the *site worked*.
+
+1. `./deploy.sh ... | tail -4` in a shell without `pipefail` returned `tail`'s
+   exit code. The push had died; I read "exit 0" and said it was deployed. The
+   live site sat on the previous build for another twenty minutes.
+2. The branch push failed with `RPC failed; HTTP 400`, which HTTP/1.1 fixed, so
+   I assumed the deploy's identical-looking failure had the same cause. It did
+   not — that one was payload size — and the "fix" changed nothing.
+3. Splitting the push by territory made it succeed, and published a landing page
+   whose four cards 404'd until the last chunk landed. The user saw it before I
+   did, because I was watching git output rather than the URL.
+
+**Pattern:** for anything with a live endpoint, the check is `curl` against the
+real URL and an assertion about the *content*, not an exit code and not a build
+status. Where a change is published in pieces, also ask what the thing looks
+like halfway through — "it works once finished" is not the same as "it is never
+broken".
+
+**Fixes applied:** deploy.sh stages the upload and moves gh-pages in one ref
+update, so there is no half-built window and Pages builds once on a complete
+tree; an EXIT trap prints failure to stderr regardless of what the caller does
+with stdout.
+
+## Build what fits the product, not what the prompt literally says (2026-09-17)
+The brief specified "above the fold, a table of candidate doubles with these
+columns", so I built a separate bespoke page with that table. The reaction was
+"this is so bad, why is it not like any other area??? I just want the same but
+with a flag that says double pole". Rebuilt as a fourth condition flag on the
+standard area page: same chips, filters, exports, review, map. Perhaps a third
+of the bespoke page's code was thrown away.
+
+**Pattern:** when a request describes a UI for a product that already has a
+shape, the existing shape usually wins. A literal reading that produces a
+one-off surface is worth a single question up front, and the answer was
+predictable from the repo: every area page is generated from one template for a
+reason.
