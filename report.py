@@ -38,7 +38,8 @@ ATTRIBUTION = ("Imagery and detections © Mapillary contributors, CC BY-SA 4.0. 
                "Basemap © OpenStreetMap contributors.")
 OSM_ATTRIBUTION = "OSM pole comparison © OpenStreetMap contributors, ODbL."
 DEFAULT_CONTACT = "mailto:selim.amrouni@gmail.com"
-DEFAULT_EXAMPLE = {"greenpoint-brooklyn-new-york": "gree-00062"}  # chosen after viewing the photo: whole pole, clear, unremarkable
+DEFAULT_EXAMPLE = {"greenpoint-brooklyn-new-york": "gree-00062",  # chosen after viewing the photo: whole pole, clear, unremarkable
+                   "reading-massachusetts": "read-00070"}  # same: whole pole, crossarm, streetlight arm, comm lines, terminal box, no flags
 
 
 def ms_date(ms):
