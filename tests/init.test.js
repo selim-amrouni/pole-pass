@@ -63,13 +63,17 @@ test('deep link selects the record; unknown id is reported', () => {
 });
 
 test('review decisions persist locally under the dataset version', () => {
-  const { document, PP, storage, window } = boot('#pole=gree-00309');
+  // record ids are renumbered by every dedupe run, so find the crossarm-flagged pole in the built data
+  const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
+  const target = win.POLE_DATA.records.find(r => r.util && r.xarm === 'damaged');
+  assert.ok(target, 'the built data has a utility pole with crossarm damage');
+  const { document, PP, storage, window } = boot(`#pole=${target.id}`);
   const btn = document.getElementById('detail').querySelectorAll('button').find(b => b.dataset.rf === 'crossarm' && b.dataset.rv === 'supported');
   assert.ok(btn, 'crossarm flag has review buttons');
   btn.click();
   const key = Object.keys(storage)[0];
   assert.match(key, new RegExp(window.POLE_DATA.meta.version));
-  assert.equal(JSON.parse(storage[key])['gree-00309'].flags.crossarm, 'supported');
+  assert.equal(JSON.parse(storage[key])[target.id].flags.crossarm, 'supported');
   assert.match(document.getElementById('detail').innerHTML, /Saved in this browser only/);
 });
 
