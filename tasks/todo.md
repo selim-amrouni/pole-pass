@@ -150,3 +150,20 @@ Plan: ~/.claude/plans/resilient-roaming-stallman.md. Four branches, PR each into
 - Photo-overlap rule tested (outline x-offset in shared photos, 4 m fallback): 22/29 agreement, catches 6/7 over-merges but splits 6 "same" and would add 329 records to Reading. Not adopted (user: no to a second grading round).
 - Shipped: dedupe.py cluster() is complete linkage at 8 m (every pair within radius, closest pairs first). Records 865/1,672/1,519 -> 962/1,731/1,739; utility 619/1,532/1,380 -> 706/1,591/1,589. Severe-lean counts unchanged (10/2/6).
 - Issue #5 stays open for the 4 to 8 m street-side case.
+
+## UI review pass (brief received 2026-09-17, branch feature/ui-review, no deploy without authorization)
+Plan: ~/.claude/plans/resilient-roaming-stallman.md
+- [x] 1. Homepage: result first (hero read-00070 with model markers, area cards with photo + freshness, brief's copy); report.py summary.json gains example + shown_by_month
+- [x] 2. App header/toolbar/workspace: one summary line, grouped filters, More filters, active-filter line, no page scroll, About dialog
+- [x] 3. Detail pane: photo + date + age first, "Why this record is listed" with dated support, review, attributes, collapsed technical
+- [x] 4. Freshness: 24-month recent, age labels, representative date documented
+- [x] 5. Review: All/Unreviewed/Reviewed, progress, next unreviewed, review columns in exports, JSON import with conflict preview
+- [x] 6. Map: load/WebGL/tile failure states, retry without duplicate instances, list reclaims space
+- [x] 7. Copy, 8. accessibility, 9. deferred items documented
+- [x] Tests (39 node, 20 python), report rebuild from cache, dry-run deploy, screenshots at 1440/1280/768/390 (390 and 768 via iframes: headless Chrome will not open a window under about 500 px), code review, PR (not merged, not deployed)
+
+### UI review pass, results (2026-09-17, branch feature/ui-review)
+- Found while rebuilding: out/<slug>/crops/<pole_id>.jpg were stale after the complete-linkage change (ids renumbered; resized() skips existing files), so list thumbnails and card photos showed the wrong pole. The deployed site has had this since PR #28. Crops are now named by detection id and pruned; the example record is keyed by detection id too. Needs a deploy to fix live.
+- Map failure from the brief not reproduced: unpkg, OSM tiles, and WebGL all load in a fresh headless Chrome. Added detection of a blocked library / no WebGL / construction error / tile errors, one retry that re-injects the script without a second map instance, and a failed state where the list takes the workspace.
+- Reviewed/partial/unreviewed semantics, 24-month freshness, per-flag dated support, review columns in exports, JSON import with conflict preview, About dialog, landing hero and cards: all covered by node tests against the built Greenpoint bundle.
+- Not done, by design: no geocoded street names (none in the data), no "resolved" status, no validation numbers.

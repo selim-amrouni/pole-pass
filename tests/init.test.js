@@ -4,27 +4,33 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { makeDocument } = require('./fakedom.js');
+const { makeDocument, El } = require('./fakedom.js');
 
 const OUT = path.join(__dirname, '..', 'out', 'greenpoint-brooklyn-new-york');
-const IDS = ['summary', 'dates-label|span', 'territory|select', 'loc-name|span', 'kind|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|button', 'other|input', 'years|input', 'years-n|span', 'osm-wrap|label', 'osm|input', 'osm-n|span', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img'];
+const IDS = ['summary', 'dates-label|span', 'territory|select', 'loc-name|span', 'kind|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|input', 'other|input', 'years|input', 'years-n|span', 'osm-wrap|label', 'osm|input', 'osm-n|span', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'imp-review|button', 'imp-file|input', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'map-state', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img',
+  'map-notice', 'chips-eq', 'chips-more', 'g-issues', 'g-equip', 'g-review', 'review-seg|span', 'review-n|span', 'recent-n|span', 'more-btn|button', 'more-menu', 'more-fold', 'active', 'import-dlg|dialog', 'import-body', 'import-close|button', 'about-dlg|dialog', 'about-close|button'];
 
 function boot(hash = '', width = 1440, extra = {}) {
   const document = makeDocument(IDS.map(s => s.split('|')));
-  const storage = {}; const localStorage = { getItem: k => storage[k] ?? null, setItem: (k, v) => { storage[k] = String(v); } };
+  const storage = Object.assign({}, extra.storage);
+  const localStorage = { getItem: k => storage[k] ?? null, setItem: (k, v) => { storage[k] = String(v); } };
   const window = { innerWidth: width, addEventListener() {}, PP: require('../web/predicates.js'), location: { hash, pathname: '/', search: '' } };
   const history = { replaceState: (s, t, url) => { window.location.hash = url.startsWith('#') ? url : ''; } };
   const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
   window.POLE_DATA = win.POLE_DATA;
   const app = fs.readFileSync(path.join(OUT, 'app.js'), 'utf8');
+  const URLStub = extra.URL || { createObjectURL: () => 'blob:' };
+  const BlobStub = extra.Blob || class {};
   new Function('window', 'document', 'localStorage', 'history', 'location', 'CSS', 'URL', 'Blob', 'console', 'fetch', app)(
-    window, document, localStorage, history, window.location, { escape: s => s }, { createObjectURL: () => 'blob:' }, class {}, console, extra.fetch);
+    window, document, localStorage, history, window.location, { escape: s => s }, URLStub, BlobStub, console, extra.fetch);
   return { window, document, PP: window.PolePass, storage };
 }
 
 test('initializes without maplibregl: fallback shown, list and count rendered, nothing selected', () => {
   const { document, PP, window } = boot();
-  assert.match(document.getElementById('map').innerHTML, /The map could not load/);
+  assert.match(document.getElementById('map-state').innerHTML, /map library/);
+  assert.equal(document.getElementById('map-state').hidden, false);
+  assert.equal(document.getElementById('ws').classList.contains('map-failed'), true, 'the list reclaims the space');
   assert.equal(document.getElementById('legend').hidden, true);
   const util = window.POLE_DATA.records.filter(r => r.util).length;
   assert.match(document.getElementById('count').innerHTML, new RegExp(`of <span class="mono">${util}</span>`));
@@ -84,7 +90,7 @@ test('prev/next move within the filtered list and single-photo records say so', 
   assert.equal(PP.state.selected, PP.filtered[1].id);
   const single = window.POLE_DATA.records.find(r => r.util && r.n === 1);
   PP.select(single.id);
-  assert.match(document.getElementById('detail').innerHTML, /Single photo/);
+  assert.match(document.getElementById('detail').innerHTML, /1 of 1 photo\b/);
 });
 
 test('multi-year filter keeps records photographed in 2+ years; compare pairs the farthest photos in time', () => {
@@ -127,9 +133,100 @@ test('territory selector appears only when a territories.json lists this bundle'
   await new Promise(r => setTimeout(r, 0));
   const sel = withList.document.getElementById('territory');
   assert.equal(sel.hidden, false); assert.match(sel.innerHTML, /Elsewhere/); assert.match(sel.innerHTML, /selected>Greenpoint/);
-  assert.equal(withList.document.getElementById('kind').textContent, 'city');
+  assert.equal(withList.document.getElementById('kind').textContent, 'Urban', 'kind is shown as a plain label');
   const without = hide(boot('', 1440, { fetch: () => Promise.resolve({ ok: false }) }));
   await new Promise(r => setTimeout(r, 0));
   assert.equal(without.document.getElementById('territory').hidden, true);
   assert.equal(without.document.getElementById('kind').hidden, true);
+});
+
+test('review filter narrows to reviewable, unreviewed records; reviewed is empty with no decisions', () => {
+  const { document, PP, window } = boot();
+  PP.state.review = 'unreviewed';
+  PP.refresh();
+  const expected = window.POLE_DATA.records.filter(r => window.PP.isUtility(r) && window.PP.reviewableFlags(r).length > 0);
+  assert.equal(PP.filtered.length, expected.length);
+  assert.ok(PP.filtered.every(r => window.PP.reviewableFlags(r).length > 0));
+  assert.equal(document.getElementById('review-n').textContent, `0 of ${expected.length} reviewed`);
+
+  PP.state.review = 'reviewed';
+  PP.refresh();
+  assert.equal(PP.filtered.length, 0);
+});
+
+test('nextUnreviewed moves to a later record whose flags are not all decided', () => {
+  const { document, PP, window } = boot();
+  PP.state.review = 'unreviewed';
+  PP.refresh();
+  const first = PP.filtered[0];
+  PP.select(first.id);
+  const flags = window.PP.reviewableFlags(first);
+  assert.ok(flags.length, 'the first unreviewed record has reviewable flags');
+  const detail = document.getElementById('detail');
+  flags.forEach(k => { detail.querySelectorAll('button').find(b => b.dataset.rf === k && b.dataset.rv === 'supported').click(); });
+  assert.equal(window.PP.reviewState(first, PP.review[first.id]), 'reviewed');
+  const totalReviewable = window.POLE_DATA.records.filter(r => r.util && window.PP.reviewableFlags(r).length > 0).length;
+  assert.equal(document.getElementById('review-n').textContent, `1 of ${totalReviewable} reviewed`);
+  PP.nextUnreviewed();
+  assert.notEqual(PP.state.selected, first.id);
+  const next = window.POLE_DATA.records.find(r => r.id === PP.state.selected);
+  assert.notEqual(window.PP.reviewState(next, PP.review[next.id]), 'reviewed');
+});
+
+test('an old-shape saved review (no "updated" field) still renders a review status and a pressed button', () => {
+  const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
+  const D = win.POLE_DATA;
+  const target = D.records.find(r => r.util && (r.lean === 'moderate' || r.lean === 'severe'));
+  const key = `polepass-review:${D.meta.slug}:${D.meta.version}`;
+  const storage = { [key]: JSON.stringify({ [target.id]: { flags: { lean: 'supported' }, note: 'x' } }) };
+  const { document, PP } = boot('', 1440, { storage });
+  PP.state.flag = 'lean';
+  PP.refresh();
+  const row = document.getElementById('list').querySelectorAll('.row').find(el => el.dataset.id === target.id);
+  assert.ok(row, 'the target pole renders within the lean-filtered list');
+  // the row's own innerHTML is not populated by the fake DOM's tolerant parser (only the container that
+  // received the raw string keeps it); check the list container's markup instead.
+  assert.match(document.getElementById('list').innerHTML, /Reviewed: supported/);
+  PP.select(target.id);
+  const btn = document.getElementById('detail').querySelectorAll('button').find(b => b.dataset.rf === 'lean' && b.dataset.rv === 'supported');
+  assert.equal(btn.getAttribute('aria-pressed'), 'true');
+});
+
+test('CSV export includes review columns; decided rows show reviewed/partial, undecided rows are blank', () => {
+  const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
+  const D = win.POLE_DATA;
+  const PPred = require('../web/predicates.js');
+  const target = D.records.find(r => r.util && (r.lean === 'moderate' || r.lean === 'severe'));
+  const untouched = D.records.find(r => r.util && r.id !== target.id && PPred.reviewableFlags(r).length > 0);
+  const untouchedFlag = PPred.reviewableFlags(untouched)[0];
+  const key = `polepass-review:${D.meta.slug}:${D.meta.version}`;
+  const storage = { [key]: JSON.stringify({ [target.id]: { flags: { lean: 'supported' }, note: '', updated: new Date().toISOString() } }) };
+  let captured = null;
+  class FakeBlob { constructor(parts, opts) { this.text = parts.join(''); this.type = opts && opts.type; } }
+  const FakeURL = { createObjectURL: b => { captured = b; return 'blob:'; } };
+  const { document } = boot('', 1440, { storage, Blob: FakeBlob, URL: FakeURL });
+  document.getElementById('exp-csv-f').click();
+  assert.ok(captured, 'download() built a Blob and asked for an object URL');
+  const lines = captured.text.split('\n');
+  const header = lines[0].split(',');
+  assert.ok(header.includes('review_status')); assert.ok(header.includes('review_lean')); assert.ok(header.includes('review_note')); assert.ok(header.includes('review_updated'));
+  const col = name => header.indexOf(name);
+  const row = lines.find(l => l.startsWith(target.id + ','));
+  assert.ok(row, 'the decided record is in the export');
+  const cells = row.split(',');
+  assert.match(cells[col('review_status')], /^(reviewed|partial)$/);
+  const otherRow = lines.find(l => l.startsWith(untouched.id + ','));
+  const otherCells = otherRow.split(',');
+  assert.equal(otherCells[col(`review_${untouchedFlag}`)], '', 'undecided rows leave the per-flag review cell blank, not "No"');
+  assert.equal(otherCells[col('review_note')], '');
+});
+
+test('the about link opens the about dialog; the close button closes it', () => {
+  const { document } = boot();
+  const link = document.body.appendChild(new El('a'));
+  link.setAttribute('href', '#about');
+  link.click();
+  assert.equal(document.getElementById('about-dlg').open, true);
+  document.getElementById('about-close').click();
+  assert.equal(document.getElementById('about-dlg').open, false);
 });

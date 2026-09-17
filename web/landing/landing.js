@@ -1,40 +1,73 @@
-/* Pole Pass landing page. Renders one card per territory from territories.json (written by deploy.sh:
-   name and kind from web/territories.json, stats from each bundle's summary.json). No counts live in the HTML.
-   Exposes window.PoleLanding = { render, forwardPoleLink } so tests can drive it without fetch. */
+/* Pole Pass landing page. Renders the hero example and one card per area from territories.json (written by deploy.sh:
+   name and kind from web/territories.json, stats from each bundle's summary.json). No count lives in the HTML.
+   Exposes window.PoleLanding = { render, renderHero, freshness, cardHtml, forwardPoleLink } so tests can drive it without fetch. */
 (function () {
   'use strict';
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const num = n => Number.isFinite(n) ? n.toLocaleString('en-US') : '';
-  const KIND = { city: 'city', suburb: 'suburb', backcountry: 'backcountry' };
+  const KIND = { city: 'Urban', suburb: 'Suburban', backcountry: 'Rural' };
+  const RECENT_MONTHS = 24;
+  const HERO_SLUG = 'reading-massachusetts';
 
-  function stat(label, value, cls) { return value === '' ? '' : `<div><dd class="${cls || ''}">${esc(value)}</dd><dt>${esc(label)}</dt></div>`; }
-
-  function cardHtml(t) {
-    const s = t.stats || {}, c = s.counts || {};
-    const years = c.photo_year_first && c.photo_year_last ? (c.photo_year_first === c.photo_year_last ? String(c.photo_year_first) : `${c.photo_year_first}–${c.photo_year_last}`) : '';
-    const stats = [
-      stat('utility poles', num(c.utility)),
-      stat('possible condition issues', num(c.condition_issues), 'issue'),
-      stat('watch items (slight lean)', num(c.warnings), 'warn'),
-      stat('photos assessed', num(c.frames_classified)),
-      stat('photo years', years),
-      stat('photographed in several years', num(c.multi_year)),
-      c.not_in_osm == null ? '' : stat('not in OpenStreetMap', num(c.not_in_osm)),
-    ].join('');
-    const kind = KIND[t.kind] ? `<span class="kind ${KIND[t.kind]}">${esc(KIND[t.kind])}</span>` : '';
-    return `<a class="card" href="${encodeURIComponent(t.slug)}/" data-slug="${esc(t.slug)}">
-      <div class="top"><span class="name">${esc(t.name || t.slug)}</span>${kind}</div>
-      ${stats ? `<dl class="stats">${stats}</dl>` : '<p class="muted small">Counts not published for this area.</p>'}
-      <div class="open">Open the map →</div>
-      ${s.generated ? `<div class="muted small gen">Built ${esc(s.generated)}${s.version ? ` · dataset <span class="mono">${esc(s.version)}</span>` : ''}</div>` : ''}
-    </a>`;
+  // Share of poles whose representative photo (the one shown on the area page) was taken within the window,
+  // from the per-month histogram of those dates; computed at view time from `now`, never from the build date.
+  function freshness(stats, now) {
+    const c = stats && stats.counts || {}, hist = stats && stats.shown_by_month || null;
+    const range = c.photo_year_first && c.photo_year_last ? (c.photo_year_first === c.photo_year_last ? `Photos ${c.photo_year_first}` : `Photos ${c.photo_year_first} to ${c.photo_year_last}`) : 'Photo dates unknown';
+    if (!hist) return { range, share: null, recent: null, total: null, text: range };
+    const d = new Date(now), cutoff = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - RECENT_MONTHS + 1, 1)).toISOString().slice(0, 7);
+    let total = 0, recent = 0;
+    Object.entries(hist).forEach(([ym, n]) => { total += n; if (ym >= cutoff) recent += n; });
+    const undated = stats.undated || 0;
+    const share = total ? Math.round(100 * recent / total) : null;
+    const text = !total ? range : recent ? `${range} · ${share}% within ${RECENT_MONTHS} months` : `${range} · none within ${RECENT_MONTHS} months`;
+    return { range, share, recent, total, undated, text: undated ? `${text} · ${num(undated)} undated` : text };
   }
 
-  function render(list, el) {
+  function cardHtml(t, now) {
+    const s = t.stats || {}, c = s.counts || {};
+    const kind = KIND[t.kind] ? `<span class="kind ${esc(t.kind)}">${esc(KIND[t.kind])}</span>` : '';
+    const pic = s.example && s.example.crop ? `<img src="${esc(`${encodeURIComponent(t.slug)}/${s.example.crop}`)}" alt="Street photo of a pole in ${esc(t.name || t.slug)}, ${esc(s.example.date || 'date unknown')}" loading="lazy" onerror="this.parentNode.classList.add('nophoto');this.remove()"><span class="ph" hidden>Photo unavailable</span>`
+      : '<span class="ph">No photo published</span>';
+    const fr = freshness(s, now);
+    return `<article class="card" data-slug="${esc(t.slug)}">
+      <div class="pic">${pic}</div>
+      <div class="body">
+        <div class="top"><span class="name">${esc(t.name || t.slug)}</span>${kind}</div>
+        ${Number.isFinite(c.utility) ? `<div class="n"><b>${num(c.utility)}</b> pole records</div>` : '<div class="n muted">Counts not published</div>'}
+        <div class="fresh">${esc(fr.text)}</div>
+        <a class="btn primary" href="${encodeURIComponent(t.slug)}/">Explore ${esc((t.name || t.slug).split(',')[0])}</a>
+      </div></article>`;
+  }
+
+  function render(list, el, now) {
     const ok = Array.isArray(list) ? list.filter(t => t && typeof t.slug === 'string' && t.slug) : [];
     if (!ok.length) { el.innerHTML = '<div class="empty">No areas are published yet.</div>'; return 0; }
-    el.innerHTML = ok.map(cardHtml).join('');
+    el.innerHTML = ok.map(t => cardHtml(t, now || Date.now())).join('');
     return ok.length;
+  }
+
+  // Hero: one real photo from the example record of the preferred area, with at most three model observations drawn on it.
+  function renderHero(list, frame, cap) {
+    const ok = Array.isArray(list) ? list.filter(t => t && t.slug && t.stats && t.stats.example && t.stats.example.crop) : [];
+    const t = ok.find(x => x.slug === HERO_SLUG) || ok[0];
+    if (!t) { frame.innerHTML = '<div class="ph">Example photo unavailable.</div>'; cap.textContent = ''; return null; }
+    const ex = t.stats.example, m = ex.marks || {};
+    const src = `${encodeURIComponent(t.slug)}/${ex.crop}`;
+    const W = 1000, H = 1250, X = p => (p[0] * W).toFixed(1), Y = p => (p[1] * H).toFixed(1), R = 22;
+    // at most three marks: the pole axis, then up to two attachments, then the transformer if there is room
+    let svg = '', keys = [], marks = 0;
+    if (m.top && m.base) { svg += `<line class="axis" x1="${X(m.top)}" y1="${Y(m.top)}" x2="${X(m.base)}" y2="${Y(m.base)}"/>`; keys.push(['axis', 'Pole axis']); marks++; }
+    const atts = (m.att || []).filter(a => a && a.p).slice(0, 3 - marks);
+    atts.forEach((a, i) => { svg += `<circle class="mk att" cx="${X(a.p)}" cy="${Y(a.p)}" r="${R}"/><text x="${X(a.p)}" y="${(+Y(a.p) + 8).toFixed(1)}" text-anchor="middle" font-size="24">${i + 1}</text>`; marks++; });
+    if (atts.length) keys.push(['att', `Attachment${atts.length > 1 ? 's' : ''}: ${atts.map(a => a.l).filter(Boolean).join(', ') || 'communication'}`]);
+    if (m.xfmr && marks < 3) { svg += `<rect class="mk xfmr" x="${X(m.xfmr) - R}" y="${Y(m.xfmr) - R}" width="${2 * R}" height="${2 * R}"/>`; keys.push(['xfmr', 'Transformer']); marks++; }
+    const G = { axis: '<line x1="7" y1="1" x2="7" y2="13"/>', att: '<circle cx="7" cy="7" r="5.5"/>', xfmr: '<rect x="2" y="2" width="10" height="10"/>' };
+    const key = keys.length ? `<div class="key"><span class="kt">Model observations</span>${keys.map(([k, l]) => `<span><svg viewBox="0 0 14 14" class="g ${k}" aria-hidden="true">${G[k]}</svg>${esc(l)}</span>`).join('')}</div>` : '';
+    frame.innerHTML = `<img src="${esc(src)}" alt="Street photo of pole ${esc(ex.id)} in ${esc(t.name)}, taken ${esc(ex.date || 'date unknown')}, with the model's marked observations" onerror="this.parentNode.innerHTML='<div class=ph>Example photo unavailable.</div>'">${svg ? `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${svg}</svg>` : ''}${key}`;
+    const flagNote = ex.flags && ex.flags.length ? 'Model flags on this record have not been verified.' : 'No model flag on this record.';
+    cap.innerHTML = `${esc(t.name)} · photo ${esc(ex.date || 'date unknown')}${ex.by ? ` by ${esc(ex.by)}` : ''} · <a href="${encodeURIComponent(t.slug)}/#pole=${encodeURIComponent(ex.id)}">Open this record</a><br><span class="small">Markers are model observations, not measurements. ${flagNote} Photo © Mapillary contributors, CC BY-SA 4.0${ex.url ? ` · <a href="${esc(ex.url)}" target="_blank" rel="noopener">source</a>` : ''}.</span>`;
+    return t.slug;
   }
 
   // Old root links carried #pole=<id> and were forwarded to the first territory; keep that working.
@@ -49,9 +82,10 @@
     fetch('territories.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).then(list => {
       const to = forwardPoleLink(list, location);
       if (to) { location.replace(to); return; }
-      render(list, el);
-    }).catch(() => render([], el));
+      renderHero(list, document.getElementById('hero-frame'), document.getElementById('hero-cap'));
+      render(list, el, Date.now());
+    }).catch(() => { render([], el); renderHero([], document.getElementById('hero-frame'), document.getElementById('hero-cap')); });
   }
 
-  if (typeof window !== 'undefined') { window.PoleLanding = { render, forwardPoleLink, cardHtml }; if (typeof document !== 'undefined' && document.getElementById) init(); }
+  if (typeof window !== 'undefined') { window.PoleLanding = { render, renderHero, freshness, cardHtml, forwardPoleLink, RECENT_MONTHS }; if (typeof document !== 'undefined' && document.getElementById) init(); }
 })();

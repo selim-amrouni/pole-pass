@@ -51,6 +51,16 @@ to its source photo.
    `web/predicates.js`, which mirrors `condition_flags()` and
    `warning_flags()` in dedupe.py. Two tiers: issue (orange) and watch (amber,
    slight lean only). Tests: `node --test tests/*.test.js` and `uv run python3 -m unittest discover -s tests`.
+   UI pass of 2026-09-17: About lives in a dialog; filters are grouped (issues,
+   equipment, review status, More filters) and AND-combined with one flag chip
+   at a time; the representative date per pole is `shown.ts` and "recent" is 24
+   months from view time; review decisions are browser-local with `updated`
+   timestamps, exported as `review_*` columns and importable with a conflict
+   preview; the map has loading / empty / failed states with one retry.
+   `out/<slug>/crops/` are named by detection id and pruned on every report run
+   (pole ids renumber; `resized()` skips existing files, which once left stale
+   thumbnails after the merge-rule change). Pole-id references in code or tests
+   go stale after any dedupe change; key by detection id or find by predicate.
 
 8. `osm.py` Overpass query for `power=pole` and `man_made=utility_pole` nodes in
    the bbox, cached forever under `data/osm/<slug>/`; nearest node per utility
@@ -58,6 +68,13 @@ to its source photo.
    per-record `osm` distance, the "Not in OpenStreetMap" filter, and the OSM
    attribution only when the diff exists. Zero OSM poles is a real result
    (Greenpoint has none), not an error.
+
+Deferred (need data or a product decision, not built): a human-reviewed validation
+sample across areas and flag types with sample sizes (issue #1); matching against a
+utility's own GIS with explicit uncertain matches (#19); a coverage view of where
+usable imagery exists and how old it is (#18); change review across dated views
+without treating visual differences as confirmed changes; shared review with accounts
+only if a real user needs it.
 
 ## Constraints
 - No model training, no GPU.

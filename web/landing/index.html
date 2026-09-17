@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pole Pass</title>
-<meta name="description" content="Utility poles from public street-level photos: an experiment in reviewing a service territory's poles from Mapillary imagery, one page per area.">
+<meta name="description" content="Utility poles, viewed from the street. Public street photos mapped to pole records with visible equipment and possible issues, one page per area.">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="landing.css">
@@ -12,33 +12,40 @@
 <body>
 <header class="hdr">
   <span class="brand">Pole Pass</span>
-  <nav><a class="btn" href="#how">How it works</a><a class="btn" href="#areas">Areas</a><a class="btn primary" href="mailto:selim.amrouni@gmail.com">Contact Selim</a></nav>
+  <nav><a href="#areas">Explore areas</a><a href="#how">How it works</a><a class="btn" href="mailto:selim.amrouni@gmail.com">Contact</a></nav>
 </header>
 
 <main>
-  <section class="hero">
-    <h1>What public street photos can say about a town's utility poles</h1>
-    <p class="lede">Mapillary holds millions of street-level photos with utility poles already outlined in them. Pole Pass takes every pole detection in a service territory, has a vision model look at the photos, and lays the result out as a map you can check pole by pole: type, visible equipment, attachments, and possible condition issues, each linked to its source photo.</p>
-    <p class="notice">Experimental. The model's assessments have not been independently verified, and a photo cannot establish structural condition. Treat every flag as a reason to look, not a finding.</p>
+  <section class="intro">
+    <div class="copy">
+      <h1>Utility poles, viewed from the street.</h1>
+      <p class="lede">I used public street photos to map poles, identify visible equipment, and flag things worth checking. Open a pole to see the photos and judge the result.</p>
+      <p class="actions"><a class="btn primary" href="#areas">Explore the areas</a><a class="btn" href="#how">How it works</a></p>
+      <p class="note">Experimental. Model flags need human review; photos do not establish structural condition.</p>
+    </div>
+    <figure class="hero" id="hero">
+      <div class="frame" id="hero-frame"><div class="ph">Loading example…</div></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
   </section>
 
   <section id="areas" class="areas">
     <h2>Pick an area</h2>
-    <p class="muted">Each area is a separate page built from its own photos. Counts below are model estimates, computed from the same data the page shows.</p>
     <div class="cards" id="cards" aria-live="polite"></div>
   </section>
 
   <section id="how" class="prose">
     <h2>How it works</h2>
     <ol class="steps">
-      <li><b>Find the poles.</b> Mapillary's map features mark where its detector saw a utility pole. For each one, the photos where the pole appears largest are fetched, and the pole is cropped out using Mapillary's own outline.</li>
-      <li><b>Look at each photo.</b> A vision model answers a fixed set of questions about every crop: is this a utility pole or a street light, wood or steel, does it lean, is the crossarm intact, is a transformer visible, are branches touching, how many communication attachments. It also says where in the photo it saw each thing.</li>
-      <li><b>Combine and show.</b> Photos of the same pole are merged into one record with a vote per field and the disagreement kept as a reliability signal. Where a street was photographed in several years, the photos can be compared side by side. Detected poles are also checked against OpenStreetMap.</li>
+      <li><b>Find poles.</b> Mapillary detections identify candidate poles in public street photos.</li>
+      <li><b>Read the photos.</b> A vision model describes visible equipment and flags possible issues.</li>
+      <li><b>Check the result.</b> Open each record to review its photos, compare views, and record your assessment.</li>
     </ol>
     <h2>What it cannot do</h2>
-    <p>A photo does not show rot, ground-line decay, loading, ownership, or compliance. Old, blurred, or distorted images mislead. In wooded areas a branch behind the pole reads as touching it. A pole with no flag has not been inspected. The useful output is a worklist of things worth a look, with the photo attached, not a condition rating.</p>
+    <p>Photos cannot establish structural condition, electrical loading, ownership, or compliance. Old images, camera angles, and obstructions can mislead the model. A record with no flag has not been inspected.</p>
+    <p class="muted">Each area page has the technical details: how photos are chosen, how records are merged, how dates are used, and what has and has not been validated. The comparison with OpenStreetMap uses volunteer mapping, not utility inventory.</p>
     <h2>Try another area</h2>
-    <p>Send me an area you know. I will check how much imagery it has and whether a review like this would be worth running there. <a class="btn primary" href="mailto:selim.amrouni@gmail.com">Contact Selim</a></p>
+    <p>Have an area in mind? Send me the town or service territory. I'll check the available imagery. <a class="btn primary" href="mailto:selim.amrouni@gmail.com">Ask about another area</a></p>
   </section>
 </main>
 

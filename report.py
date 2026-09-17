@@ -20,6 +20,7 @@ browser from data.js with web/predicates.js, not written here.
 """
 import argparse
 import csv
+from collections import Counter
 import hashlib
 import json
 import shutil
@@ -38,8 +39,11 @@ ATTRIBUTION = ("Imagery and detections © Mapillary contributors, CC BY-SA 4.0. 
                "Basemap © OpenStreetMap contributors.")
 OSM_ATTRIBUTION = "OSM pole comparison © OpenStreetMap contributors, ODbL."
 DEFAULT_CONTACT = "mailto:selim.amrouni@gmail.com"
-DEFAULT_EXAMPLE = {"greenpoint-brooklyn-new-york": "gree-00062",  # chosen after viewing the photo: whole pole, clear, unremarkable
-                   "reading-massachusetts": "read-00070"}  # same: whole pole, crossarm, streetlight arm, comm lines, terminal box, no flags
+# Example record opened on first load, keyed by the detection id of its shown photo (the crop file name), because pole ids
+# are renumbered by every dedupe run. Each chosen after viewing the crop: whole pole, clear, visible equipment, no flag.
+DEFAULT_EXAMPLE = {"greenpoint-brooklyn-new-york": "det:619927453431602",  # wood pole with a terminal box and comm cables
+                   "reading-massachusetts": "det:1387761053001946",        # crossarm, streetlight arm, comm lines, terminal box
+                   "hardwick-vermont": "det:227228208854685"}              # pole with crossarm against woods, videolog frame
 
 
 def ms_date(ms):
@@ -123,7 +127,8 @@ def load_osm(slug, utility_ids):
 def build_records(poles, out_dir, polygons, marks, osm_dist=None):
     rows = []
     for p in poles:
-        shown_img = f"crops/{p['pole_id']}.jpg" if resized(p.get("best_crop"), out_dir / "crops" / f"{p['pole_id']}.jpg", CROP_PX) else None
+        det = Path(p["best_crop"]).stem if p.get("best_crop") else None  # detection id: stable across dedupe runs, unlike the pole id
+        shown_img = f"crops/{det}.jpg" if det and resized(p["best_crop"], out_dir / "crops" / f"{det}.jpg", CROP_PX) else None
         frames = []
         for f in p["frames"]:
             img = f"frames/{f['image_id']}.jpg" if resized(f.get("crop"), out_dir / "frames" / f"{f['image_id']}.jpg", FRAME_PX, 78) else None
@@ -156,6 +161,23 @@ def build_records(poles, out_dir, polygons, marks, osm_dist=None):
     return rows
 
 
+def resolve_example(key, poles):
+    """A pole id, or "det:<detection id>" matched against each record's shown photo (its best_crop). None when absent, with a warning."""
+    if not key:
+        return None
+    if key.startswith("det:"):
+        det = key[4:]
+        for p in poles:
+            if p.get("best_crop") and Path(p["best_crop"]).stem == det:
+                return p["pole_id"]
+        print(f"warning: example {key} not found among shown photos, none will be opened")
+        return None
+    if key not in {p["pole_id"] for p in poles}:
+        print(f"warning: example {key} not in dataset, none will be opened")
+        return None
+    return key
+
+
 def bundle_summary(meta, rows, summary, coverage):
     """Small per-bundle stats for the root landing page. Same predicates as the page: dedupe.py condition/warning flags."""
     util = [r for r in rows if r["util"]]
@@ -163,7 +185,19 @@ def bundle_summary(meta, rows, summary, coverage):
     multi = sum(1 for r in util if len({f["year"] for f in r["frames"] if f.get("year")}) >= 2)
     osm = meta.get("osm")
     not_in_osm = sum(1 for r in util if not (r.get("osm") is not None and r["osm"] <= osm["headline_m"])) if osm else None  # same rule as predicates.js notInOsm
-    return {"slug": meta["slug"], "location": meta["location"], "version": meta["version"], "generated": meta["generated"],
+    # representative date per pole = the photo shown (newest readable assessed photo); one entry per pole, by capture month,
+    # so the landing page can compute the share within a window at view time without counting frames twice
+    by_month = Counter(r["shown"]["date"] for r in util if r["shown"].get("date"))
+    ex = next((r for r in rows if r["id"] == meta.get("example_id")), None)
+    exf = next((f for f in ex["frames"] if f.get("shown")), None) if ex else None
+    example = None
+    if ex and ex["shown"].get("img"):
+        mk = (exf or {}).get("marks") or {}
+        example = {"id": ex["id"], "crop": ex["shown"]["img"], "date": ex["shown"].get("date"), "ts": ex["shown"].get("ts"), "url": ex["shown"].get("url"), "by": ex["shown"].get("by"),
+                   "flags": ex["flags"], "type": ex["type"],
+                   "marks": {"top": mk.get("top"), "base": mk.get("base"), "att": [a for a in mk.get("att", []) if a.get("p")][:2], "xfmr": mk.get("xfmr")} if mk else None}
+    return {"slug": meta["slug"], "location": meta["location"], "version": meta["version"], "generated": meta["generated"], "example": example,
+            "shown_by_month": dict(sorted(by_month.items())), "undated": sum(1 for r in util if not r["shown"].get("date")),
             "counts": {"records": len(rows), "utility": len(util), "condition_issues": sum(1 for r in util if r["flags"]),
                        "warnings": sum(1 for r in util if r["warn"]), "frames_classified": summary["frames_classified"],
                        "photo_year_first": min(years) if years else None, "photo_year_last": max(years) if years else None, "multi_year": multi,
@@ -223,7 +257,7 @@ def tech_details(summary, coverage, method, tilt_meta=None, osm=None):
 <li>Crops: the detection polygon's box, widened to 1.5 times the pole width or 0.3 times its height (at least 150 px each side), with 25% headroom above and 5% below, resized to at most 1200 px. Photos where the pole is under {method['min_px_h']} px tall or {method['min_px_w']} px wide are not assessed: {summary['frames_skipped']:,} of {summary['frames_total']:,} photos, leaving {summary['frames_classified']:,} assessed photos on {summary['features_with_classified_frame']:,} features.</li>
 <li>Model: {method['model']} through the Batches API, one crop per request, a fixed JSON schema (pole present, pole type, material, lean, crossarm, transformer, vegetation, attachment count, self-rating, note). The self-rating is not calibrated. Notes are free text and are shown only per photo under technical details.</li>
 <li>Records: photos of one feature are combined, then features that all lie within {method['radius_m']} m of each other are grouped into one record (no chaining: a hand check of 29 merged Reading records found 7 over-merges, worst in chains of features 25 to 30 m apart, so a merge now needs every pair within the radius) ({summary['records_merged_from_multiple_features']} of {summary['records']} records combine more than one feature). Each field takes the most common value across assessed photos, ties going to the more cautious value; exact vote counts are kept. Photos from one drive are correlated, so agreement across them is not independent verification. {summary['single_frame_records']} records rest on a single photo.</li>
-<li>Photo shown: the newest assessed photo where the pole is at least {method['readable_px']} px tall, otherwise the largest. The record's fields combine all assessed photos, which can include older ones than the photo shown. The latest available photo, assessed or not, is listed separately.</li>
+<li>Photo shown: the newest assessed photo where the pole is at least {method['readable_px']} px tall, otherwise the largest. Its capture date is the record's representative date: the date filters, the "within 24 months" switch, ages, and the area's freshness summary all use it, and it can be older than the latest photo available (linked separately). The record's fields combine all assessed photos, which can include older ones than the photo shown; each flag lists the dated photos that show it. The latest available photo, assessed or not, is listed separately.</li>
 <li>Positions on photos: a second model pass (same model, one request per assessed photo) was given the crop with a faint labeled grid and the earlier assessment, and asked for the position of the pole top and base, each counted attachment, the transformer, crossarm damage, and vegetation contact. These are approximate model estimates of where something appears in the photo, shown as markers you can hide. They are not measurements and were not verified.</li>
 <li>Apparent tilt: for each assessed photo, the angle of Mapillary's pole outline from the image vertical (medial axis of the outline, 12 scanlines, least squares). It is a property of the photo, not a measurement of the pole: camera roll, perspective, and a lean toward or away from the camera all distort it.{f" {'Flat photos' if tilt_meta['kind'] == 'flat' else 'Photos'} the model called straight read a median of {tilt_meta['none_median']}° and up to {tilt_meta['none_p90']}° at the 90th percentile ({tilt_meta['none_n']:,} photos); panoramas read noisier." if tilt_meta else ""}</li>
 <li>Push braces: a support pole set at a steep angle against a straight pole is a common Mapillary utility-pole detection and reads as a severe lean. The model labels these as push braces, listed under other detected objects and never flagged for lean. For Greenpoint and Hardwick the label was applied by resending only the photos the first pass had called moderate or severe (schema 2, 2026-09-16); later territories use it throughout.</li>
@@ -269,15 +303,17 @@ def main():
     out_dir = OUT / slug
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    for sub in ("crops", "frames"):  # drop images from earlier builds that no current record references (ids renumber; crops were once named by pole id)
+        keep = {Path(p["best_crop"]).stem for p in poles if p.get("best_crop")} if sub == "crops" else {f["image_id"] for p in poles for f in p["frames"]}
+        for old in (out_dir / sub).glob("*.jpg"):
+            if old.stem not in keep:
+                old.unlink()
     marks = load_marks(slug)
     osm_meta, osm_dist = load_osm(slug, [p["pole_id"] for p in poles if p["is_utility_pole"]])
     attribution = f"{ATTRIBUTION} {OSM_ATTRIBUTION}" if osm_meta else ATTRIBUTION
     rows = build_records(poles, out_dir, load_polygons(slug), marks, osm_dist if osm_meta else None)
     version = hashlib.sha1(json.dumps([{k: v for k, v in r.items() if k not in ("shown", "frames")} for r in rows], sort_keys=True).encode()).hexdigest()[:8]
-    example = args.example or DEFAULT_EXAMPLE.get(slug)
-    if example and example not in {r["id"] for r in rows}:
-        print(f"warning: example {example} not in dataset, none will be opened")
-        example = None
+    example = resolve_example(args.example or DEFAULT_EXAMPLE.get(slug), poles)
     bbox = coverage["bbox"]
     method = {"radius_m": summary["radius_m"], "readable_px": summary["readable_px"], "min_px_h": 150, "min_px_w": 20,
               "frames_per_feature": 3, "model": "claude-sonnet-5"}
@@ -294,8 +330,8 @@ def main():
 
     notice, vsection, vshort = validation_blocks(precision)
     contact_nav = f'<a class="btn primary big" href="{args.contact}">Contact Selim</a>' if args.contact else ""
-    contact_section = ("<h2>Try another area</h2><p>Send me an area you know. I'll check the available imagery and see whether a similar review would be useful.</p>"
-                       f"<p><a class=\"btn primary\" href=\"{args.contact}\">Contact Selim</a></p>") if args.contact else ""
+    contact_section = ("<h3>Try another area</h3><p>Have an area in mind? Send me the town or service territory. I'll check the available imagery.</p>"
+                       f"<p><a class=\"btn primary\" href=\"{args.contact}\">Ask about another area</a></p>") if args.contact else ""
     html = render((WEB / "index.html").read_text(), {
         "LOCATION": meta["location"], "GENERATED": generated, "VERSION": version, "VALIDATION_NOTICE": notice, "VALIDATION_SHORT": vshort,
         "VALIDATION_SECTION": vsection, "TECH_DETAILS": tech_details(summary, coverage, method, tilt_meta, osm_meta),
