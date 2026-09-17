@@ -6,6 +6,7 @@ Usage:
   uv run python3 classify.py --town "..." --limit 10 --mode direct     # sync, for eyeballing
   uv run python3 classify.py --town "..."                              # Batches API, half price
   uv run python3 classify.py --town "..." --resume <batch_id>          # pick up a submitted batch
+  uv run python3 classify.py --town "..." --redo-lean moderate,severe --mode direct   # resend old-schema lean calls
 
 Reads  data/fetch/<slug>/observations.jsonl
 Writes data/crops/<detection_id>.jpg                     crop sent to the model
@@ -28,6 +29,7 @@ from PIL import Image
 from coverage import DATA, ROOT, load_env, slugify
 
 MODEL = "claude-sonnet-5"
+SCHEMA_VERSION = 2                          # 2: push_brace added to pole_type (2026-09-16); stored in each result file
 PRICE_IN, PRICE_OUT = 2.00, 10.00          # $ per 1M tokens, Sonnet 5
 BATCH_DISCOUNT = 0.5
 MAX_LONG_SIDE = 1200                        # crop resize cap; ~640 image tokens at 1200x400
@@ -44,7 +46,10 @@ Definitions:
 - pole_type: wood_utility = wooden pole carrying electric or communication lines;
   concrete_or_steel_utility = same role, concrete or steel; street_light = pole whose only job is a
   luminaire (often ornamental cast iron in New York); traffic_signal = signal or sign mast;
-  other = flagpole, fence post, sign post, etc.
+  push_brace = a shorter pole set on purpose at a steep angle against a straight utility pole to
+  hold it up (also called a prop or stub brace); its angle is by design, so when the crop's main
+  subject is the brace report push_brace and lean_severity unclear, and do not call the braced
+  pole leaning because of the brace; other = flagpole, fence post, sign post, etc.
 - attachment_count: number of distinct NON-electric attachments on the pole: communication cable
   bundles (telecom, cable TV, fiber), their terminal boxes, splice enclosures, risers, antennas,
   cameras. Exclude the electric conductors, the streetlight arm, and signs. Count what you can see.
@@ -63,7 +68,7 @@ SCHEMA = {
     "type": "object",
     "properties": {
         "pole_present": {"type": "boolean"},
-        "pole_type": {"type": "string", "enum": ["wood_utility", "concrete_or_steel_utility", "street_light", "traffic_signal", "other", "unclear"]},
+        "pole_type": {"type": "string", "enum": ["wood_utility", "concrete_or_steel_utility", "street_light", "traffic_signal", "push_brace", "other", "unclear"]},
         "material": {"type": "string", "enum": ["wood", "concrete", "steel", "fiberglass", "unclear"]},
         "lean_severity": {"type": "string", "enum": ["none", "slight", "moderate", "severe", "unclear"]},
         "crossarm_condition": {"type": "string", "enum": ["none_visible", "intact", "damaged", "unclear"]},
@@ -80,6 +85,13 @@ SCHEMA = {
 
 
 # ---------------------------------------------------------------- crops
+def needs_redo(cached, leans):
+    """True when a cached result should be resent: its lean call is in `leans` and it predates SCHEMA_VERSION."""
+    if not leans or not cached.get("result"):
+        return False
+    return cached["result"].get("lean_severity") in leans and cached.get("schema", 1) < SCHEMA_VERSION
+
+
 def make_crop(obs, crops_dir):
     """Crop around the pole bbox with context, resize, save. Returns (path, (w,h)) or (None, reason)."""
     out = crops_dir / f"{obs['detection_id']}.jpg"
@@ -162,7 +174,10 @@ def main():
     ap.add_argument("--resume", help="batch id to collect instead of submitting")
     ap.add_argument("--no-wait", action="store_true", help="submit the batch and exit; collect later with --resume")
     ap.add_argument("--chunk", type=int, default=BATCH_CHUNK, help="requests per batch submission")
+    ap.add_argument("--redo-lean", metavar="CALLS", help="comma list, e.g. moderate,severe: resend cached results with these lean calls "
+                    "that predate the current schema (old result kept as <id>.v1.json)")
     args = ap.parse_args()
+    redo_leans = {x.strip() for x in args.redo_lean.split(",") if x.strip()} if args.redo_lean else set()
 
     slug = slugify(args.town)
     src = DATA / "fetch" / slug / "observations.jsonl"
@@ -178,9 +193,14 @@ def main():
     for o in obs_all:
         p = res_dir / f"{o['detection_id']}.json"
         if p.exists():
-            if json.loads(p.read_text()).get("dropped"):
+            cached = json.loads(p.read_text())
+            if cached.get("dropped"):
                 skipped[o["detection_id"]] = "cached_drop"
-            continue
+                continue
+            if not needs_redo(cached, redo_leans):
+                continue
+            if not args.estimate:
+                p.rename(p.with_suffix(".v1.json"))  # superseded by the rerun; kept for traceability
         path, info = make_crop(o, crops_dir)
         if path is None:
             skipped[o["detection_id"]] = info
@@ -249,7 +269,7 @@ def run_direct(client, todo, res_dir):
             continue
         for kk in total:
             total[kk] += usage[kk]
-        (res_dir / f"{o['detection_id']}.json").write_text(json.dumps({"detection_id": o["detection_id"], "model": MODEL, "result": rec, "usage": usage}))
+        (res_dir / f"{o['detection_id']}.json").write_text(json.dumps({"detection_id": o["detection_id"], "model": MODEL, "schema": SCHEMA_VERSION, "result": rec, "usage": usage}))
         print(f"  {k}/{len(todo)} {o['detection_id']} {rec['pole_type']:>26} att={rec['attachment_count']} lean={rec['lean_severity']} "
               f"xarm={rec['crossarm_condition']} veg={rec['vegetation_contact']} conf={rec['confidence']:.2f}")
     print(f"usage {total}  cost ${cost_usd(total, batch=False):.3f}")
@@ -300,7 +320,7 @@ def collect_batch(client, batch_id, todo, res_dir):
                 rec, usage = parse_result(r.result.message)
                 for kk in total:
                     total[kk] += usage[kk]
-                (res_dir / f"{did}.json").write_text(json.dumps({"detection_id": did, "model": MODEL, "result": rec, "usage": usage, "batch": batch_id}))
+                (res_dir / f"{did}.json").write_text(json.dumps({"detection_id": did, "model": MODEL, "schema": SCHEMA_VERSION, "result": rec, "usage": usage, "batch": batch_id}))
                 n_ok += 1
                 continue
             except (ValueError, json.JSONDecodeError) as e:
@@ -315,7 +335,7 @@ def collect_batch(client, batch_id, todo, res_dir):
                 rec, usage = parse_result(msg)
                 for kk in total:
                     total[kk] += usage[kk]
-                (res_dir / f"{did}.json").write_text(json.dumps({"detection_id": did, "model": MODEL, "result": rec, "usage": usage, "retried": err}))
+                (res_dir / f"{did}.json").write_text(json.dumps({"detection_id": did, "model": MODEL, "schema": SCHEMA_VERSION, "result": rec, "usage": usage, "retried": err}))
                 n_ok += 1
                 continue
             except Exception as e:

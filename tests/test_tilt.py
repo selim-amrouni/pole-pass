@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from grade import load_sample, valid_value, write_sample  # noqa: E402
+from classify import SCHEMA_VERSION, needs_redo  # noqa: E402
 from tilt import apparent_tilt  # noqa: E402
 
 
@@ -75,6 +76,21 @@ class GradeCsvTest(unittest.TestCase):
         self.assertTrue(valid_value("truth_is_utility_pole", "n")); self.assertFalse(valid_value("truth_is_utility_pole", "yes"))
         self.assertTrue(valid_value("truth_attachment_count", "3")); self.assertFalse(valid_value("truth_attachment_count", "3.5"))
         self.assertTrue(valid_value("grader_notes", "free text")); self.assertFalse(valid_value("grader_notes", "x" * 2001))
+
+
+class RedoLeanTest(unittest.TestCase):
+    """--redo-lean resends only old-schema results whose lean call is listed; dropped rows and current results stay cached."""
+
+    def test_selection(self):
+        old_sev = {"result": {"lean_severity": "severe"}}
+        old_mod = {"result": {"lean_severity": "moderate"}, "schema": 1}
+        old_none = {"result": {"lean_severity": "none"}}
+        new_sev = {"result": {"lean_severity": "severe"}, "schema": SCHEMA_VERSION}
+        dropped = {"dropped": "pole_too_small"}
+        leans = {"moderate", "severe"}
+        self.assertTrue(needs_redo(old_sev, leans)); self.assertTrue(needs_redo(old_mod, leans))
+        self.assertFalse(needs_redo(old_none, leans)); self.assertFalse(needs_redo(new_sev, leans))
+        self.assertFalse(needs_redo(dropped, leans)); self.assertFalse(needs_redo(old_sev, set()))
 
 
 if __name__ == "__main__":
