@@ -5,11 +5,12 @@
   uv run python3 costs.py --town "Hardwick, Vermont"
 
 Each result file stores the usage the API reported and whether it came from a batch (half price).
-Files renamed <id>.v1.json by classify.py --redo-lean are superseded results; their cost was still paid,
+Files renamed <id>.v<schema>.json by classify.py --redo-lean are superseded results; their cost was still paid,
 so they are counted on their own line. Dropped rows have no usage and cost nothing.
 """
 import argparse
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -28,7 +29,7 @@ def spend(slug):
             r = json.loads(p.read_text())
             if not r.get("usage"):
                 continue
-            key = (step, "superseded" if p.name.endswith(".v1.json") else "current", "batch" if r.get("batch") else "direct")
+            key = (step, "superseded" if re.search(r"\.v\d+\.json$", p.name) else "current", "batch" if r.get("batch") else "direct")
             tot[key]["n"] += 1
             tot[key]["usd"] += cost_usd(r["usage"], batch=bool(r.get("batch")))
         rows += [(k, v) for k, v in sorted(tot.items())]
@@ -39,7 +40,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--town")
     args = ap.parse_args()
-    slugs = [slugify(args.town)] if args.town else sorted({p.name for p in (DATA / "classify").iterdir() if p.is_dir()})
+    root = DATA / "classify"
+    slugs = [slugify(args.town)] if args.town else sorted(p.name for p in root.iterdir() if p.is_dir()) if root.exists() else []
     for slug in slugs:
         rows = spend(slug)
         total = sum(v["usd"] for _, v in rows)

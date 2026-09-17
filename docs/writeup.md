@@ -26,9 +26,9 @@ Three territories were run to show the contrast between kinds of places:
 
 ## What changed the results
 
-- **Push braces.** Every severe-lean record in Hardwick was a push brace: a support pole set at an
-  angle against a straight pole, which Mapillary detects as a utility pole and the first schema
-  read as a severely leaning pole. The classifier now has a `push_brace` type; braces are listed
+- **Push braces.** All three severe-lean records in Hardwick's first pass involved a push brace: a
+  support pole set at an angle against a straight pole, which Mapillary detects as a utility pole
+  and the first schema read as a severely leaning pole. The classifier now has a `push_brace` type; braces are listed
   under other detected objects and never flagged. For the two territories classified before that,
   only the photos the first pass had called moderate or severe were resent (`classify.py
   --redo-lean moderate,severe`, direct mode); the superseded results are kept as `<id>.v1.json`.
