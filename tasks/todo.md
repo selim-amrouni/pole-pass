@@ -32,7 +32,7 @@ First three candidates (Tier 1, P1 call first, Not contacted, compact territory)
 - [x] CTA contact link: report.py DEFAULT_CONTACT is mailto:selim.amrouni@gmail.com in both deployed bundles (confirmed 2026-09-16)
 - [x] GitHub repo https://github.com/selim-amrouni/pole-pass (public, MIT) + Pages at https://selim-amrouni.github.io/pole-pass/ via deploy.sh
 - [x] 16 issues filed for known problems and deferred work
-- [ ] Stretch: Overpass diff vs OSM power=pole
+- [x] Stretch: Overpass diff vs OSM power=pole (osm.py, PR #24)
 - [ ] Writeup with every number traced to data/
 
 ## Page rework (spec received 2026-09-15)
@@ -113,8 +113,33 @@ Chester MA 225; Lake Placid 117; Tupper Lake 119. Hardwick picked; newest photos
 
 ## Third pass (plan approved 2026-09-16): OSM diff, push brace, landing page, Reading MA, writeup
 Plan: ~/.claude/plans/resilient-roaming-stallman.md. Four branches, PR each into main.
-- [ ] 1. fix/push-brace: push_brace pole_type (schema 2), classify --redo-lean moderate,severe in direct mode for both territories, dedupe tie order, page copy, test; close #22 with before/after severe counts
-- [ ] 2. feature/osm-diff: osm.py (Overpass power=pole + man_made=utility_pole, cached under data/osm/<slug>/), nearest-OSM-node per utility record, page filter "Not in OpenStreetMap", exports column, attribution; close #13
-- [ ] 3. feature/landing: web/landing/ root page fed by territories.json with per-bundle summary.json stats, deploy.sh copies it, suburb kind, About copy templated by location
+- [x] 1. fix/push-brace (PR #23): push_brace pole_type (schema 2), classify --redo-lean moderate,severe in direct mode for both territories, dedupe tie order, page copy, test; close #22 with before/after severe counts
+- [x] 2. feature/osm-diff (PR #24): osm.py (Overpass power=pole + man_made=utility_pole, cached under data/osm/<slug>/), nearest-OSM-node per utility record, page filter "Not in OpenStreetMap", exports column, attribution; close #13
+- [x] 3. feature/landing (PR #25): web/landing/ root page fed by territories.json with per-bundle summary.json stats, deploy.sh copies it, suburb kind, About copy templated by location
 - [ ] 4. feature/reading: run.py gains locate/tilt/osm steps, Reading MA run (~$15), review, deploy all three
 - [ ] 5. docs/writeup.md, every number with its data/ path
+
+### Push-brace rerun, Hardwick (2026-09-17, data/poles/hardwick-vermont/summary.json, logs/hardwick-redo-lean.log)
+- 255 photos resent (all moderate/severe first-pass calls), 0 dropped, $0.58 direct (costs.py: classify current direct).
+- Utility records 1,534 -> 1,532; lean flags 35 -> 26; severe utility records 3 -> 2, and they are different poles:
+  hard-00180 (9 photos, 4 severe, marker tape on the pole, outline tilt to 10 deg: real) and hard-01250 (two poles leaning on each other, maybe decommissioned: worth a look).
+- The three former severe records: hard-01160 is now push_brace; hard-00011 and hard-01066 are wood_utility with lean unclear (the model was told not to read the brace as a lean), so no flag.
+- push_brace records: 2 (hard-00589, hard-01160). Tie between push_brace and wood_utility resolves to push_brace (TIE_ORDER, conservative).
+- Tilt calibration, flat: none median 1.9 / p90 5.3 (n=2,189, unchanged); severe median 9.8 / p90 17.0 (n=18, was 31.3 / n=42 with the braces).
+
+### Push-brace rerun, Greenpoint (2026-09-17, data/poles/greenpoint-brooklyn-new-york/summary.json, logs/greenpoint-redo-lean.log)
+- 240 photos resent, 0 dropped, $0.64 direct. No push braces found (city). Utility records 620 -> 619 (gree-00362 is now a street light).
+- Lean flags 25 -> 17; records with any issue 83 -> 76; watch items 363 -> 373 (some moderate calls became slight on the resend, model variance).
+- Severe utility records 8 -> 10: seven of the eight stayed severe, gree-00362 left as a street light, and gree-00001 (14 photos, 6 severe, outline tilt to 12 deg), gree-00024, gree-00222 (1 photo, 18.6 deg) joined.
+  The severe set is not stable frame to frame; the flag is a reason to look, not a finding, and the page says so.
+- Tilt calibration, flat: none median 2.4 / p90 7.9 (n=759); severe median 8.9 / p90 13.3 (n=40).
+- Both territories: OSM has 0 pole nodes in the Greenpoint bbox and 134 in Hardwick's, none within 15 m of a detected pole (data/osm/<slug>/summary.json).
+
+### Reading, Massachusetts (2026-09-17, data/poles/reading-massachusetts/summary.json, logs/reading-run2.log)
+- Fetch 9,987 photos (3,330 features, 3 frames), 4,057 skipped as too small; 5,923 distinct detections classified in 3 batches ($7.01), located in 3 batches ($7.87), 0 dropped. Total $14.87 (costs.py).
+- 1,519 records, 1,380 utility. Flags: vegetation 431, lean 31, crossarm 0; watch 403; transformer 47; 3+ attachments 9; no push braces. 83 poles photographed in 2+ years.
+- Severe lean 6 (read-00075, 00700, 00707, 00979, 01073, 01234), outline tilts 6 to 12 deg, notes consistent; read-01073 "broken with wires holding it up".
+- Tilt calibration, flat: none median 2.2 / p90 5.5 (n=698); severe 11.0 / p90 16.1 (n=15).
+- OSM: 189 pole nodes in the bbox (164 power=pole, 25 man_made=utility_pole); 96 of 1,380 detected poles have one within 15 m; 1,284 absent.
+- Example record read-00070 chosen after viewing the crop (whole pole, crossarm, streetlight arm, comm lines, terminal box, no flags).
+- Batch API rejected chunk 2 for duplicate custom_ids (7 detections shared by two features); fixed, lesson recorded. First chunk resumed with --resume.

@@ -204,9 +204,13 @@ def main():
     crops_dir = DATA / "crops"
     res_dir.mkdir(parents=True, exist_ok=True)
 
-    # crops + skip list
-    todo, skipped, sizes, redo = [], {}, {}, {}
+    # crops + skip list. Two Mapillary features can share a detection (duplicate features a few meters apart);
+    # one request per detection id, and write_output gives every observation row the cached result.
+    todo, skipped, sizes, redo, seen = [], {}, {}, {}, set()
     for o in obs_all:
+        if o["detection_id"] in seen:
+            continue
+        seen.add(o["detection_id"])
         p = res_dir / f"{o['detection_id']}.json"
         if p.exists():
             cached = json.loads(p.read_text())

@@ -58,6 +58,9 @@ initialization without a map library; `uv run python3 -m unittest discover -s te
 covers the tilt estimator, the grading CSV round trip, the classifier's
 `--redo-lean` selection, and the OSM matcher.
 
+`costs.py` sums API spend per territory from the cached result files,
+splitting batch from direct and current from superseded results.
+
 `run.py` chains 1 through 8. Everything caches under `data/`; a rerun makes no
 API calls.
 

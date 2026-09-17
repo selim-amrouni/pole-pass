@@ -127,7 +127,8 @@ def main():
     rows = [r for r in rows if r.get("classification") and r.get("crop") and (ROOT / r["crop"]).exists()]
     res_dir = DATA / "locate" / slug / "results"
     res_dir.mkdir(parents=True, exist_ok=True)
-    todo = [r for r in rows if not (res_dir / f"{r['detection_id']}.json").exists()]
+    seen = set()  # a detection shared by two features appears twice in the rows; one request per detection id
+    todo = [r for r in rows if not (res_dir / f"{r['detection_id']}.json").exists() and not (r["detection_id"] in seen or seen.add(r["detection_id"]))]
     if args.limit:
         todo = todo[:args.limit]
     cached = sum(1 for r in rows if (res_dir / f"{r['detection_id']}.json").exists())
