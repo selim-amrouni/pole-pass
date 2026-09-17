@@ -118,3 +118,19 @@ Plan: ~/.claude/plans/resilient-roaming-stallman.md. Four branches, PR each into
 - [ ] 3. feature/landing: web/landing/ root page fed by territories.json with per-bundle summary.json stats, deploy.sh copies it, suburb kind, About copy templated by location
 - [ ] 4. feature/reading: run.py gains locate/tilt/osm steps, Reading MA run (~$15), review, deploy all three
 - [ ] 5. docs/writeup.md, every number with its data/ path
+
+### Push-brace rerun, Hardwick (2026-09-17, data/poles/hardwick-vermont/summary.json, logs/hardwick-redo-lean.log)
+- 255 photos resent (all moderate/severe first-pass calls), 0 dropped, $0.58 direct (costs.py: classify current direct).
+- Utility records 1,534 -> 1,532; lean flags 35 -> 26; severe utility records 3 -> 2, and they are different poles:
+  hard-00180 (9 photos, 4 severe, marker tape on the pole, outline tilt to 10 deg: real) and hard-01250 (two poles leaning on each other, maybe decommissioned: worth a look).
+- The three former severe records: hard-01160 is now push_brace; hard-00011 and hard-01066 are wood_utility with lean unclear (the model was told not to read the brace as a lean), so no flag.
+- push_brace records: 2 (hard-00589, hard-01160). Tie between push_brace and wood_utility resolves to push_brace (TIE_ORDER, conservative).
+- Tilt calibration, flat: none median 1.9 / p90 5.3 (n=2,189, unchanged); severe median 9.8 / p90 17.0 (n=18, was 31.3 / n=42 with the braces).
+
+### Push-brace rerun, Greenpoint (2026-09-17, data/poles/greenpoint-brooklyn-new-york/summary.json, logs/greenpoint-redo-lean.log)
+- 240 photos resent, 0 dropped, $0.64 direct. No push braces found (city). Utility records 620 -> 619 (gree-00362 is now a street light).
+- Lean flags 25 -> 17; records with any issue 83 -> 76; watch items 363 -> 373 (some moderate calls became slight on the resend, model variance).
+- Severe utility records 8 -> 10: seven of the eight stayed severe, gree-00362 left as a street light, and gree-00001 (14 photos, 6 severe, outline tilt to 12 deg), gree-00024, gree-00222 (1 photo, 18.6 deg) joined.
+  The severe set is not stable frame to frame; the flag is a reason to look, not a finding, and the page says so.
+- Tilt calibration, flat: none median 2.4 / p90 7.9 (n=759); severe median 8.9 / p90 13.3 (n=40).
+- Both territories: OSM has 0 pole nodes in the Greenpoint bbox and 134 in Hardwick's, none within 15 m of a detected pole (data/osm/<slug>/summary.json).

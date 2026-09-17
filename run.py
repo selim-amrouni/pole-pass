@@ -3,7 +3,7 @@
 
   uv run python3 run.py --town "Norwich, Connecticut" [--frames 3] [--contact mailto:...] [--skip-classify]
 
-Steps: coverage -> fetch -> classify (batch, waits) -> dedupe -> report.
+Steps: coverage -> fetch -> classify (batch, waits) -> locate (batch) -> dedupe -> tilt --calibrate -> osm -> report.
 validate.py is deliberately manual: sample, grade by hand, score, then rerun report.
 """
 import argparse
@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 from coverage import DATA, slugify
+from report import DEFAULT_CONTACT
 
 
 def step(name, cmd, done):
@@ -27,7 +28,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--town", required=True)
     ap.add_argument("--frames", type=int, default=3)
-    ap.add_argument("--contact", default="")
+    ap.add_argument("--contact", default=DEFAULT_CONTACT, help="contact href for the page; empty string omits the button")
     ap.add_argument("--skip-classify", action="store_true", help="stop before spending on the API")
     ap.add_argument("--force", action="store_true", help="rerun every step (caches still prevent refetching)")
     a = ap.parse_args()
@@ -40,7 +41,9 @@ def main():
         print("stopped before classification (--skip-classify)")
         return
     step("classify", ["classify.py", "--town", a.town], False)  # its own per-detection cache handles reruns
+    step("locate", ["locate.py", "--town", a.town], False)      # same: per-detection cache
     step("dedupe", ["dedupe.py", "--town", a.town], False)
+    step("tilt", ["tilt.py", "--town", a.town, "--calibrate"], False)  # offline, derived from classify results, so it always reruns
     step("osm", ["osm.py", "--town", a.town], False)  # Overpass response is cached; matching reruns because dedupe renumbers pole ids
     step("report", ["report.py", "--town", a.town, "--contact", a.contact], False)
 
