@@ -34,6 +34,23 @@ class NearestTest(unittest.TestCase):
         self.assertEqual(nearest_within(pts, targets, 25)[0][1], "t")
 
 
+class HighLatitudeSweepTest(unittest.TestCase):
+    def test_no_misses_across_cell_edges_at_high_latitude(self):
+        # Fairbanks-like: |lon| large, cos(lat) small. Sweep points 24 m from a target in 12 bearings across many positions.
+        import math
+        lat0, lon0 = 64.8, -147.7
+        m_lat = 1 / 111_320; m_lon = m_lat / math.cos(math.radians(lat0))
+        misses = 0
+        for i in range(400):
+            tl = (lon0 + i * 0.00013, lat0 + i * 0.00011)
+            for b in range(12):
+                a = math.radians(b * 30)
+                p = (tl[0] + 24 * math.sin(a) * m_lon, tl[1] + 24 * math.cos(a) * m_lat)
+                got = nearest_within([("p", *p)], [("t", *tl, "power=pole")], 25)
+                misses += got[0][1] is None
+        self.assertEqual(misses, 0)
+
+
 class DiffTest(unittest.TestCase):
     def test_counts_add_up(self):
         poles = [("p1", *at(0)), ("p2", *at(100)), ("p3", *at(200)), ("p4", *at(210))]

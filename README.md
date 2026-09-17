@@ -41,7 +41,7 @@ classifier labels them `push_brace`; they are listed under other detected
 objects and never flagged. Greenpoint and Hardwick were classified before that
 label existed, so only their moderate and severe lean calls were resent
 (`classify.py --redo-lean moderate,severe`); the old results stay as
-`<id>.v1.json`.
+`<id>.v<schema>.json`.
 
 Flags come in two tiers. Possible condition issues (lean moderate or severe,
 crossarm damaged, vegetation touching) are orange. Watch items (slight lean)

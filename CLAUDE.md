@@ -32,7 +32,7 @@ to its source photo.
    poles from street-light and traffic-signal poles that Mapillary lumps
    into its utility-pole class, and `push_brace` for the angled support
    poles Mapillary also detects (schema 2; `--redo-lean moderate,severe`
-   resends old-schema lean calls, keeping the old result as `<id>.v1.json`).
+   resends old-schema lean calls, keeping the old result as `<id>.v<schema>.json`).
    Batch it, cache responses keyed by image id, on malformed JSON retry once
    then drop the row.
 4. `dedupe.py` cluster detections within a few meters across consecutive

@@ -86,20 +86,23 @@ def osm_nodes(raw):
     return out
 
 
-def _cell(lon, lat):
-    return (math.floor(lat / CELL_DEG), math.floor(lon / (CELL_DEG / max(math.cos(math.radians(lat)), 0.2))))
+def _cell(lon, lat, k):
+    """Grid cell of a point; k = cos(reference latitude) is fixed per call so cell edges are straight lines, not latitude-dependent."""
+    return (math.floor(lat / CELL_DEG), math.floor(lon * k / CELL_DEG))
 
 
 def nearest_within(points, targets, max_m):
     """For each (id, lon, lat) in points: (id, target_id, distance_m) of the nearest target within max_m, else (id, None, None).
 
     targets: [(id, lon, lat, ...)]. Grid-bucketed so a town with tens of thousands of nodes stays fast."""
+    ref_lat = sum(t[2] for t in targets) / len(targets) if targets else 0.0
+    k = max(math.cos(math.radians(ref_lat)), 0.2)
     grid = defaultdict(list)
     for t in targets:
-        grid[_cell(t[1], t[2])].append(t)
+        grid[_cell(t[1], t[2], k)].append(t)
     out = []
     for pid, lon, lat in points:
-        ci, cj = _cell(lon, lat)
+        ci, cj = _cell(lon, lat, k)
         best, best_d = None, None
         for di in (-1, 0, 1):
             for dj in (-1, 0, 1):
