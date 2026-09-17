@@ -44,7 +44,12 @@ DEFAULT_CONTACT = "mailto:selim.amrouni@gmail.com"
 # are renumbered by every dedupe run. Each chosen after viewing the crop: whole pole, clear, visible equipment, no flag.
 DEFAULT_EXAMPLE = {"greenpoint-brooklyn-new-york": "det:619927453431602",  # wood pole with a terminal box and comm cables
                    "reading-massachusetts": "det:1387761053001946",        # crossarm, streetlight arm, comm lines, terminal box
-                   "hardwick-vermont": "det:227228208854685"}              # pole with crossarm against woods, videolog frame
+                   "hardwick-vermont": "det:227228208854685",             # pole with crossarm against woods, videolog frame
+                   # Marblehead breaks the "no flag" habit on purpose: this area exists to show double
+                   # poles, and without an example the landing card renders "No photo published".
+                   # Highest-confidence double (0.75), largest pole in frame, and both poles of the
+                   # pair are visible in the one shot -- the old leaning pole and its replacement.
+                   "marblehead-massachusetts": "det:843980090181831"}      # Churchill Road, pair MH-216efd11
 
 
 def ms_date(ms):
