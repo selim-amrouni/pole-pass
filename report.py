@@ -28,6 +28,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import mvt
 from PIL import Image
 
 from coverage import DATA, ROOT, slugify
@@ -65,6 +66,87 @@ def resized(src, dst, px, q=80):
         dst.parent.mkdir(parents=True, exist_ok=True)
         im.save(dst, "JPEG", quality=q)
     return True
+
+
+def partner_boxes(slug, rows):
+    """Outline BOTH poles of the pair in the record's own photos, wherever each was detected there.
+
+    The main viewer draws this record's own Mapillary outline, which on a double-pole record shows
+    one pole and so shows nothing about the pair. Both of the pair's features have their own
+    detections, often in the very frames already attached to this record, so both boxes can be drawn.
+
+    Deliberately not "the partner feature": a pair is under 6 m apart and dedupe merges within 8 m,
+    so the usual case is that ONE record already owns both features and there is no partner outside
+    it. Keying off the pair's own two feature ids works either way.
+    """
+    fdir = DATA / "fetch" / slug / "features"
+    cache, n = {}, 0
+
+    def boxes_for(fid):
+        if fid not in cache:
+            p, boxes = fdir / f"{fid}.json", {}
+            if p.exists():
+                for det in (json.loads(p.read_text()).get("detections") or {}).get("data", []):
+                    if not det.get("geometry"):
+                        continue
+                    polys = mvt.decode_detection(det["geometry"])
+                    if polys:
+                        xs = [x for pl in polys for x, _ in pl]
+                        ys = [y for pl in polys for _, y in pl]
+                        boxes[str(det["image"]["id"])] = (min(xs), min(ys), max(xs), max(ys))
+            cache[fid] = boxes
+        return cache[fid]
+
+    for row in rows:
+        d = row.get("dbl")
+        if d:
+            per_feature = [boxes_for(f) for f in d.get("pair_features") or []]
+            for f in row["frames"]:
+                if not f.get("cropbox"):
+                    continue
+                (cx0, cy0, cx1, cy1), sw, sh = f["cropbox"], f["srcw"], f["srch"]
+                cw, ch = max(cx1 - cx0, 1), max(cy1 - cy0, 1)
+                found = []
+                for boxes in per_feature:
+                    b = boxes.get(str(f["id"]))
+                    if b:
+                        found.append([round((b[0] * sw - cx0) / cw, 5), round((b[1] * sh - cy0) / ch, 5),
+                                      round((b[2] * sw - cx0) / cw, 5), round((b[3] * sh - cy0) / ch, 5)])
+                if len(found) == 2:  # only useful when the frame actually shows both
+                    f["dblboxes"] = found
+                    n += 1
+        for f in row.get("frames", []):
+            f.pop("cropbox", None); f.pop("srcw", None); f.pop("srch", None)
+    return n
+
+
+def publish_double_crops(slug, out_dir, rows):
+    """Copy each double pair's crop into the bundle and attach BOTH poles' boxes, normalised to it.
+
+    A double-pole flag is a claim about two poles, so showing one outlined pole proves nothing. The
+    pair crop already frames both, and doubles.py wrote each detection's box in source-image pixels
+    alongside the crop box; converting those to 0..1 of the crop lets the page outline both."""
+    n = 0
+    for row in rows:
+        d = row.get("dbl")
+        if not d:
+            continue
+        meta_path = DATA / "doubles" / "crops" / f"{d['pair_id']}.json"
+        src = DATA / "doubles" / "crops" / f"{d['pair_id']}.jpg"
+        if not (meta_path.exists() and src.exists()):
+            continue
+        if not resized(str(src.relative_to(ROOT)), out_dir / "doubles" / f"{d['pair_id']}.jpg", FRAME_PX, 82):
+            continue
+        m = json.loads(meta_path.read_text())
+        sx0, sy0, sx1, sy1 = m["source_box"]
+        w, h = max(sx1 - sx0, 1), max(sy1 - sy0, 1)
+        def norm(b):
+            return [round((b[0] - sx0) / w, 5), round((b[1] - sy0) / h, 5),
+                    round((b[2] - sx0) / w, 5), round((b[3] - sy0) / h, 5)]
+        d["crop"] = f"doubles/{d['pair_id']}.jpg"
+        d["boxes"] = [norm(m["box_a"]), norm(m["box_b"])]
+        n += 1
+    return n
 
 
 def load_polygons(slug):
@@ -139,7 +221,9 @@ def build_records(poles, out_dir, polygons, marks, osm_dist=None):
                           xarm=mk["xarm"] if f["crossarm"] == "damaged" else None,
                           xfmr=mk["xfmr"] if f["transformer"] else None)
             pg = polygons.get(det) or {}
-            frames.append({"poly": pg.get("poly"), "size": pg.get("size"), "marks": mk,"id": f["image_id"], "date": ms_date(f.get("captured_at")), "ts": f.get("captured_at"), "year": ms_year(f.get("captured_at")),
+            cmeta = json.loads((DATA / "crops" / f"{det}.json").read_text()) if det and (DATA / "crops" / f"{det}.json").exists() else {}
+            frames.append({"poly": pg.get("poly"), "size": pg.get("size"), "marks": mk,
+                           "cropbox": cmeta.get("box"), "srcw": cmeta.get("source_w"), "srch": cmeta.get("source_h"),"id": f["image_id"], "date": ms_date(f.get("captured_at")), "ts": f.get("captured_at"), "year": ms_year(f.get("captured_at")),
                            "url": f["url"], "px": f.get("px_h"), "pano": bool(f.get("is_pano")), "seq": f.get("sequence"), "img": img, "by": f.get("creator"),
                            "type": f["pole_type"], "lean": f["lean"], "xarm": f["crossarm"], "veg": f["vegetation"], "xfmr": bool(f["transformer"]),
                            "att": f["attachments"], "conf": f.get("confidence"), "note": f.get("note") or "", "tilt": f.get("tilt"), "shown": bool(f.get("shown"))})
@@ -151,6 +235,13 @@ def build_records(poles, out_dir, polygons, marks, osm_dist=None):
                       "veg": p["votes"]["vegetation_contact"], "xfmr": p["votes"]["transformer_present"], "att": p["votes"]["attachment_count"]},
             "n": p["n_observations"], "seq": p["n_sequences"], "nfeat": len(p["feature_ids"]), "features": p["feature_ids"],
             "flags": p["condition_flags"], "warn": p.get("warning_flags", []),
+            # The double-pole verdict comes from doubles.py, which pairs FEATURES, not pole records.
+            # Absent for every town where that pass has not run, which is why the page must treat a
+            # missing `dbl` as "not looked for" rather than "no double here".
+            **({"dbl": {**{k: p["double"][k] for k in ("pair_id", "confidence", "reason", "maintainer",
+                                                       "separation_m", "cut_short", "street", "cross_street", "url")},
+                        "pair_features": p["double"].get("feature_ids") or []}}
+               if p.get("double") else {}),
             "shown": {"img": shown_img, "date": ms_date(p.get("best_captured_at")), "ts": p.get("best_captured_at"), "year": ms_year(p.get("best_captured_at")),
                       "url": p["best_mapillary_url"], "by": p.get("best_creator"), "px": p.get("best_px_h"), "newest": bool(p.get("best_is_newest"))},
             "latest": {"date": ms_date(p.get("latest_available_at")), "ts": p.get("latest_available_at"), "year": ms_year(p.get("latest_available_at")),
@@ -198,7 +289,7 @@ def bundle_summary(meta, rows, summary, coverage):
                    "marks": {"top": mk.get("top"), "base": mk.get("base"), "att": [a for a in mk.get("att", []) if a.get("p")][:2], "xfmr": mk.get("xfmr")} if mk else None}
     return {"slug": meta["slug"], "location": meta["location"], "version": meta["version"], "generated": meta["generated"], "example": example,
             "shown_by_month": dict(sorted(by_month.items())), "undated": sum(1 for r in util if not r["shown"].get("date")),
-            "counts": {"records": len(rows), "utility": len(util), "condition_issues": sum(1 for r in util if r["flags"]),
+            "counts": {"records": len(rows), "utility": len(util), "doubles": sum(1 for x in rows if x.get("dbl")), "condition_issues": sum(1 for r in util if r["flags"]),
                        "warnings": sum(1 for r in util if r["warn"]), "frames_classified": summary["frames_classified"],
                        "photo_year_first": min(years) if years else None, "photo_year_last": max(years) if years else None, "multi_year": multi,
                        "not_in_osm": not_in_osm, "osm_nodes": osm["nodes"] if osm else None},
@@ -312,9 +403,21 @@ def main():
     osm_meta, osm_dist = load_osm(slug, [p["pole_id"] for p in poles if p["is_utility_pole"]])
     attribution = f"{ATTRIBUTION} {OSM_ATTRIBUTION}" if osm_meta else ATTRIBUTION
     rows = build_records(poles, out_dir, load_polygons(slug), marks, osm_dist if osm_meta else None)
+    n_partner = partner_boxes(slug, rows)
+    n_dbl = publish_double_crops(slug, out_dir, rows)
     version = hashlib.sha1(json.dumps([{k: v for k, v in r.items() if k not in ("shown", "frames")} for r in rows], sort_keys=True).encode()).hexdigest()[:8]
     example = resolve_example(args.example or DEFAULT_EXAMPLE.get(slug), poles)
-    bbox = coverage["bbox"]
+    # Map extent comes from the RECORDS, not coverage["bbox"]. The coverage bbox is the tile
+    # enumeration box from Nominatim, and for a coastal town most of it is open water -- Marblehead's
+    # is 131 km2 reaching 5 km out to sea, which opened the map in the middle of the Atlantic with
+    # every pole off-screen. Falls back to the coverage bbox only if there are no records to fit.
+    if rows:
+        lons = [r_["lon"] for r_ in rows]
+        lats = [r_["lat"] for r_ in rows]
+        pad = 0.002  # ~200 m, so poles on the edge are not against the frame
+        bbox = [min(lons) - pad, min(lats) - pad, max(lons) + pad, max(lats) + pad]
+    else:
+        bbox = coverage["bbox"]
     method = {"radius_m": summary["radius_m"], "readable_px": summary["readable_px"], "min_px_h": 150, "min_px_w": 20,
               "frames_per_feature": 3, "model": "claude-sonnet-5"}
     generated = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
@@ -342,6 +445,9 @@ def main():
     (out_dir / "index.html").write_text(html)
     size = sum(f.stat().st_size for f in out_dir.rglob("*") if f.is_file()) / 1e6
     nframes = len(list((out_dir / "frames").glob("*.jpg")))
+    if n_dbl:
+        print(f"double-pole pair photos published for {n_dbl} records, both poles outlined; "
+              f"the other pole is also outlined in {n_partner} of the records' own photos")
     print(f"model-located positions for {len(marks)} of {summary['frames_classified']} assessed photos")
     print(f"{len(rows)} records ({meta['counts']['utility']} utility) -> {out_dir.relative_to(ROOT)}/  {size:.0f} MB, {nframes} frame images, version {version}"
           + ("" if args.contact else "  [no contact configured: contact button omitted]"))

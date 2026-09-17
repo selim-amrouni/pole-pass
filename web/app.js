@@ -15,7 +15,7 @@
     xarm: { none_visible: 'No crossarm visible', intact: 'Crossarm looks intact', damaged: 'Possible crossarm damage', unclear: 'Crossarm: cannot tell' },
     veg: { none: 'No vegetation contact seen', near: 'Vegetation nearby', touching: 'Possible vegetation contact', unclear: 'Vegetation: cannot tell' },
     mat: { wood: 'Wood', concrete: 'Concrete', steel: 'Steel', fiberglass: 'Fiberglass', unclear: 'Material: cannot tell' },
-    flag: { lean: 'Possible lean', crossarm: 'Possible crossarm damage', vegetation: 'Possible vegetation contact', lean_slight: 'Slight lean', att3: '3+ estimated attachments', xfmr: 'Transformer visible' },
+    flag: { double: 'Possible double pole', lean: 'Possible lean', crossarm: 'Possible crossarm damage', vegetation: 'Possible vegetation contact', lean_slight: 'Slight lean', att3: '3+ estimated attachments', xfmr: 'Transformer visible' },
     review: { supported: 'Yes', not_supported: 'No', cannot_tell: "Can't tell" },
     reviewLong: { supported: 'Photo supports the flag', not_supported: 'Photo does not support the flag', cannot_tell: 'Cannot tell from the photo' },
     kind: { city: 'Urban', suburb: 'Suburban', backcountry: 'Rural' },
@@ -49,15 +49,15 @@
     const s = PP.summary(D.records, state.now);
     const dates = s.yearMin == null ? 'photo dates unknown' : s.yearMin === s.yearMax ? `photos ${s.yearMin}` : `photos ${s.yearMin} to ${s.yearMax}`;
     $('summary').innerHTML = `<b class="mono">${s.utility}</b> poles · <b class="mono">${s.conditionIssues}</b> possible condition issues · ${esc(dates)}`;
-    $('summary').title = `${s.utility} pole records from the model, ${s.other} other detected objects. ${s.conditionIssues} with a possible lean, crossarm damage, or vegetation contact. ${s.warnings} with a slight lean (watch items, listed under More filters).`;
+    $('summary').title = `${s.utility} pole records from the model, ${s.other} other detected objects. ${s.conditionIssues} with a possible double pole, lean, crossarm damage, or vegetation contact. ${s.warnings} with a slight lean (watch items, listed under More filters).`;
     $('dates-label').textContent = s.yearMin == null ? '?' : `${s.yearMin}–${s.yearMax}`;
   }
 
   // ---------- filters ----------
-  const CHIPS = { chips: [['all', 'All poles', ''], ['lean', 'Lean', 'issue'], ['xarm', 'Crossarm', 'issue'], ['veg', 'Vegetation', 'issue']],
+  const CHIPS = { chips: [['all', 'All poles', ''], ['double', 'Double pole', 'issue'], ['lean', 'Lean', 'issue'], ['xarm', 'Crossarm', 'issue'], ['veg', 'Vegetation', 'issue']],
                   'chips-eq': [['att3', '3+ attachments', 'att'], ['xfmr', 'Transformer', 'neutral']],
                   'chips-more': [['lean_slight', 'Slight lean (watch item)', 'warn']] };
-  const FLAG_LABEL = { all: 'All poles', lean: 'Possible lean', xarm: 'Possible crossarm damage', veg: 'Possible vegetation contact', att3: '3+ attachments', xfmr: 'Transformer visible', lean_slight: 'Slight lean (watch item)' };
+  const FLAG_LABEL = { all: 'All poles', double: 'Possible double pole (old pole left beside its replacement)', lean: 'Possible lean', xarm: 'Possible crossarm damage', veg: 'Possible vegetation contact', att3: '3+ attachments', xfmr: 'Transformer visible', lean_slight: 'Slight lean (watch item)' };
   function renderChips() {
     const base = D.records.filter(r => state.other ? !PP.isUtility(r) : PP.isUtility(r));
     Object.entries(CHIPS).forEach(([id, list]) => { $(id).innerHTML = list.map(([k, label, cls]) => `<button class="chip ${cls}" data-f="${k}" aria-pressed="${state.flag === k}" title="${esc(FLAG_LABEL[k])}">${esc(label)}<span class="n">${base.filter(PP.FILTERS[k]).length}</span></button>`).join(''); });
@@ -176,8 +176,33 @@
   function frameObs(f) {
     return [L.lean[f.lean] || f.lean, L.xarm[f.xarm] || f.xarm, L.veg[f.veg] || f.veg, f.xfmr ? 'Transformer visible' : 'No transformer visible', Number.isInteger(f.att) ? `${f.att} estimated attachment${f.att === 1 ? '' : 's'}` : 'Attachments: cannot tell'];
   }
+  // A double pole is judged from one photo showing BOTH poles, not from this record's own frames, so
+  // it has no per-frame support line. Its evidence is the pair: the reason, the estimated gap, and a
+  // link to the frame both poles appear in. Rendered here so the flag is as inspectable as the rest.
+  function doubleEvidenceHtml(r) {
+    const d = r.dbl; if (!d) return '';
+    const where = [d.street, d.cross_street].filter(Boolean).join(' \u00d7 ');
+    const gap = Number.isFinite(d.separation_m) ? `${d.separation_m.toFixed(1)} m apart (estimated)` : 'gap not estimated';
+    const cut = d.cut_short === 'yes' ? ' · one pole cut short' : '';
+    const who = d.maintainer && d.maintainer !== 'UNCERTAIN' ? ` · ${esc(d.maintainer)} maintains this side (approximate)` : '';
+    const link = d.url ? ` <a class="lnk" href="${esc(d.url)}" target="_blank" rel="noopener">open source photo</a>` : '';
+    // The claim is about TWO poles, so show the frame that contains both with both of them outlined.
+    // One outlined pole would prove nothing about a pair.
+    const pic = d.crop && d.boxes && d.boxes.length === 2 ? `
+      <figure class="dblpair">
+        <div class="wrap">
+          <img src="${esc(d.crop)}" alt="Photo showing both poles of candidate double ${esc(d.pair_id)}, each outlined">
+          <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+            ${d.boxes.map((b, i) => `<rect class="dbl b${i}" x="${(b[0] * 1000).toFixed(1)}" y="${(b[1] * 1000).toFixed(1)}" width="${((b[2] - b[0]) * 1000).toFixed(1)}" height="${((b[3] - b[1]) * 1000).toFixed(1)}" vector-effect="non-scaling-stroke"/>`).join('')}
+          </svg>
+        </div>
+        <figcaption class="muted">Both poles of the pair, outlined. Photo © Mapillary contributors, CC BY-SA 4.0.${link}</figcaption>
+      </figure>` : '';
+    return `<div class="ev"><span>${esc(d.reason || '')}</span><span class="muted">${esc(gap)}${cut}${esc(where ? ` · ${where}` : '')}${who} · pair ${esc(d.pair_id)}</span></div>${pic}`;
+  }
   // photo-evidence line for one flag: how many photos support it, when, and what the latest assessed photo shows
   function evidenceHtml(r, k) {
+    if (k === 'double') return doubleEvidenceHtml(r);
     const s = PP.flagSupport(r, k); if (!s) return '';
     const dates = [...new Set(s.supporting.map(f => f.date).filter(Boolean))].sort();
     const n = `${s.supporting.length} of ${s.n} photo${s.n === 1 ? '' : 's'}${s.drives > 1 ? ` · ${s.drives} drives` : s.n > 1 && s.drives === 1 ? ' · 1 drive' : ''}`;
@@ -186,6 +211,14 @@
     const links = s.supporting.filter(f => f.img).map(f => `<button class="lnk" data-i="${idx(f)}">${esc(f.date || '?')}</button>`).join(', ');
     return `<div class="ev"><span>${esc(n)}${dates.length && !links ? ` (${esc(dates.join(', '))})` : ''}${links ? `: ${links}` : ''}</span><span class="muted">${latest}</span></div>`;
   }
+  function mapsLinks(r) {
+    const q = `${r.lat.toFixed(6)},${r.lon.toFixed(6)}`;
+    const pin = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+    const pano = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(q)}`;
+    return `<span class="maps"><a class="lnk" href="${pin}" target="_blank" rel="noopener" title="Open this location in Google Maps">Google Maps ↗</a>` +
+           `<a class="lnk sv" href="${pano}" target="_blank" rel="noopener" title="Google Street View: a different provider on a different date, so it is an independent check on what is standing here now">Street View ↗</a></span>`;
+  }
+
   function renderDetail() {
     const r = byId[state.selected]; if (!r) return;
     const f = r.frames[state.viewing] || null;
@@ -202,6 +235,15 @@
     const tri = (p, cls) => `<polygon class="mk ${cls}" points="${X(p)},${Y(p) - R * 1.3} ${X(p) + R * 1.2},${Y(p) + R} ${X(p) - R * 1.2},${Y(p) + R}" vector-effect="non-scaling-stroke"/>`;
     let svg = '';
     if (f && f.poly && f.poly.length && state.outline) svg += f.poly.map(ring => `<polygon class="halo" points="${ring.map(p => px(p)).join(' ')}"/><polygon class="line" points="${ring.map(p => px(p)).join(' ')}"/>`).join('');
+    // On a double-pole record, outlining one pole says nothing about a pair. When this frame shows
+    // both of the pair's detections, box them both so the claim is visible in the main photo, not
+    // only in the small pair figure.
+    if (f && f.dblboxes && state.outline) {
+      svg += f.dblboxes.map((b, i) => {
+        const x = b[0] * SW, y = b[1] * SH, w = (b[2] - b[0]) * SW, h = (b[3] - b[1]) * SH;
+        return `<rect class="dblbox b${i}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" vector-effect="non-scaling-stroke"/>`;
+      }).join('');
+    }
     if (m && state.markers) {
       if (m.top && m.base) svg += `<line class="axis" x1="${X(m.top)}" y1="${Y(m.top)}" x2="${X(m.base)}" y2="${Y(m.base)}" vector-effect="non-scaling-stroke"/>`;
       m.att.forEach((a, i) => { if (a.p) svg += circle(a.p, 'att', String(i + 1)); });
@@ -212,12 +254,13 @@
     const photo = f && f.img ? `<div class="imgwrap"><img id="dimg" src="${esc(f.img)}" alt="Photo of pole ${esc(r.id)} taken ${esc(dateLabel(f))}">${overlay}</div>${badges}`
       : `<div class="photo-missing">Photo unavailable.${f && f.url ? ` <a href="${esc(f.url)}" target="_blank" rel="noopener">Open source photo</a>` : ''}</div>`;
     const ovbar = `<div class="ovbar" role="group" aria-label="Photo annotations">
-        <button class="o" id="tg-outline" aria-pressed="${state.outline}" ${f && f.poly && f.poly.length ? '' : 'disabled'}><i></i>Outline</button>
+        <button class="o" id="tg-outline" aria-pressed="${state.outline}" ${f && ((f.poly && f.poly.length) || f.dblboxes) ? '' : 'disabled'}><i></i>Outline</button>
         <button class="m" id="tg-markers" aria-pressed="${state.markers}" ${m ? '' : 'disabled'}><i></i>Markers</button>
         <button class="b" id="tg-badges" aria-pressed="${state.badges}" ${frameFlags.length ? '' : 'disabled'}><i></i>Flags</button></div>`;
-    const G = { outline: '<rect x="4.5" y="1" width="5" height="12" rx="1"/>', axis: '<line x1="7" y1="1" x2="7" y2="13"/>', att: '<circle cx="7" cy="7" r="5.5"/>', xfmr: '<rect x="2" y="2" width="10" height="10"/>', xarm: '<polygon points="7,1.5 12.5,12 1.5,12"/>', veg: '<polygon points="7,1 13,7 7,13 1,7"/>' };
+    const G = { dblbox: '<rect x="1" y="2" width="4.5" height="10"/><rect x="8.5" y="2" width="4.5" height="10"/>', outline: '<rect x="4.5" y="1" width="5" height="12" rx="1"/>', axis: '<line x1="7" y1="1" x2="7" y2="13"/>', att: '<circle cx="7" cy="7" r="5.5"/>', xfmr: '<rect x="2" y="2" width="10" height="10"/>', xarm: '<polygon points="7,1.5 12.5,12 1.5,12"/>', veg: '<polygon points="7,1 13,7 7,13 1,7"/>' };
     const keyItems = [
       f && f.poly && f.poly.length && state.outline && ['outline', 'Mapillary outline'],
+      f && f.dblboxes && state.outline && ['dblbox', 'Both poles of the candidate double'],
       m && state.markers && m.top && m.base && ['axis', 'Pole axis, model estimate'],
       m && state.markers && m.att.length && ['att', `Attachment 1${m.att.length > 1 ? `–${m.att.length}` : ''}`],
       m && state.markers && m.xfmr && ['xfmr', 'Transformer'],
@@ -248,7 +291,7 @@
             <p class="hint">Saved in this browser only. <button class="btn sm" id="rreset">Clear</button> <button class="btn sm" id="nextun">Next unreviewed</button></p></div>` : '';
     $('detail').innerHTML = `
       <div class="detail-h"><button class="btn sm" id="back" aria-label="Back to list">← List</button><span class="id">${esc(r.id)}</span><span class="pos" id="pos"></span>
-        <div class="nav"><button class="btn sm" id="prev" aria-label="Previous pole">Prev</button><button class="btn sm" id="next" aria-label="Next pole">Next</button><button class="btn sm" id="share">Copy link</button><button class="btn sm" id="close" aria-label="Close details">Close</button></div></div>
+        <div class="nav"><button class="btn sm" id="prev" aria-label="Previous pole">Prev</button><button class="btn sm" id="next" aria-label="Next pole">Next</button><a class="btn sm sv" id="streetview" href="${`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(r.lat.toFixed(6) + ',' + r.lon.toFixed(6))}`}" target="_blank" rel="noopener" title="Google Street View here — a different provider on a different date, so it is an independent check on what is standing now">Street View ↗</a><button class="btn sm" id="share">Copy link</button><button class="btn sm" id="close" aria-label="Close details">Close</button></div></div>
       ${state.example ? `<div class="example-tag">Example record. Pick any pole from the list or map.</div>` : ''}
       <div class="dbody">
         <div class="dphoto">
@@ -262,7 +305,7 @@
           ${reviewSec}
           <div class="sec"><h3>Other visible attributes</h3><div class="fl">${attrs}</div>${f ? `<p class="hint">This photo: ${frameObs(f).map(esc).join(' · ')}.</p>` : ''}</div>
           <div class="sec"><h3>Location</h3><div class="mini" id="mini"></div>
-            <div class="kv">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)} <span>· ${r.nfeat} detection${r.nfeat === 1 ? '' : 's'} · estimate</span> · <button class="btn sm" id="fullmap">Full map</button></div></div>
+            <div class="kv">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)} <span>· ${r.nfeat} detection${r.nfeat === 1 ? '' : 's'} · estimate</span> · <button class="btn sm" id="fullmap">Full map</button> ${mapsLinks(r)}</div></div>
           <details class="sec tech"><summary>Technical details</summary>
             ${util ? tiltHtml(r) : ''}
             ${D.meta.osm && util ? `<p class="small">${Number.isFinite(r.osm) ? `Nearest OpenStreetMap pole ${r.osm.toFixed(0)} m away` : 'No OpenStreetMap pole within 25 m'}. OSM is volunteer mapping, not the utility's inventory.</p>` : ''}

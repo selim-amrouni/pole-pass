@@ -23,6 +23,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Callable, NamedTuple
 
 from PIL import Image
 
@@ -180,6 +181,20 @@ def cost_usd(usage, batch):
     return c * (BATCH_DISCOUNT if batch else 1)
 
 
+class Job(NamedTuple):
+    """A batch/direct classification pass over one kind of item, so run_direct/run_batch/collect_batch
+    can be shared between classify.py's poles and doubles.py's pairs. `id_of` and `build_request` are
+    the only things the runner ever calls on an item from `todo` -- it never assumes the item's shape."""
+    name: str                    # "poles" / "doubles", used only in printed lines
+    results_dir: Path            # per-item results cached as <custom_id>.json here
+    batches_dir: Path            # batch manifests written here
+    schema_version: int          # recorded in each result file
+    id_field: str                # key the result JSON stores the custom_id under ("detection_id" / "pair_id")
+    id_of: Callable               # item -> custom_id (str)
+    build_request: Callable       # item -> dict of kwargs for client.messages.create
+    parse: Callable               # message -> (record, usage); raises ValueError if malformed
+
+
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -261,23 +276,33 @@ def main():
         sys.exit("ANTHROPIC_API_KEY missing from .env. See .env.example.")
     client = anthropic.Anthropic(api_key=key)
 
+    pole_job = Job(name="poles", results_dir=res_dir, batches_dir=DATA / "classify" / slug / "batches",
+                   schema_version=SCHEMA_VERSION, id_field="detection_id",
+                   id_of=lambda it: it[0]["detection_id"],
+                   build_request=lambda it: build_request(it[0], it[1]),
+                   parse=parse_result)
     if args.mode == "direct" and not args.resume:
-        run_direct(client, todo, res_dir)
+        run_direct(client, pole_job, todo)
     else:
-        run_batch(client, todo, res_dir, slug, args)
+        run_batch(client, pole_job, todo, chunk=args.chunk, resume=args.resume, no_wait=args.no_wait)
     write_output(slug, obs_all, res_dir, crops_dir)
 
 
-def run_direct(client, todo, res_dir):
+def run_direct(client, job, todo):
+    """Send every item in `todo` synchronously through job.build_request/parse. Returns summed usage.
+
+    The pole path's original per-item print line named pole_type/lean/etc, fields doubles.py's records
+    won't have; that line is now generic (job.name + custom_id only) so this runner stays item-agnostic.
+    """
     import anthropic
     total = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
-    for k, (o, path) in enumerate(todo, 1):
-        req = build_request(o, path)
+    for k, item in enumerate(todo, 1):
+        cid = job.id_of(item)
         rec, err = None, None
         for attempt in range(2):
             try:
-                msg = client.messages.create(**req)
-                rec, usage = parse_result(msg)
+                msg = client.messages.create(**job.build_request(item))
+                rec, usage = job.parse(msg)
                 break
             except (ValueError, json.JSONDecodeError) as e:
                 err = f"malformed:{e}"
@@ -287,46 +312,51 @@ def run_direct(client, todo, res_dir):
                     break
                 time.sleep(2 ** attempt)
         if rec is None:
-            what = write_drop(res_dir, o["detection_id"], err)
-            print(f"  {k}/{len(todo)} {o['detection_id']} {what} ({err})")
+            what = write_drop(job.results_dir, cid, err)
+            print(f"  {job.name} {k}/{len(todo)} {cid} {what} ({err})")
             continue
         for kk in total:
             total[kk] += usage[kk]
-        (res_dir / f"{o['detection_id']}.json").write_text(json.dumps({"detection_id": o["detection_id"], "model": MODEL, "schema": SCHEMA_VERSION, "result": rec, "usage": usage}))
-        print(f"  {k}/{len(todo)} {o['detection_id']} {rec['pole_type']:>26} att={rec['attachment_count']} lean={rec['lean_severity']} "
-              f"xarm={rec['crossarm_condition']} veg={rec['vegetation_contact']} conf={rec['confidence']:.2f}")
+        (job.results_dir / f"{cid}.json").write_text(json.dumps({job.id_field: cid, "model": MODEL, "schema": job.schema_version, "result": rec, "usage": usage}))
+        print(f"  {job.name} {k}/{len(todo)} {cid} ok")
     print(f"usage {total}  cost ${cost_usd(total, batch=False):.3f}")
+    return total
 
 
 BATCH_CHUNK = 2000  # requests per batch; the API caps a submission at 256 MB and ~5,000 image requests overflow it
 
 
-def run_batch(client, todo, res_dir, slug, args):
-    """Submit `todo` in chunks (all at once, so they process in parallel), then wait for and collect each."""
+def run_batch(client, job, todo, chunk=BATCH_CHUNK, resume=None, no_wait=False):
+    """Submit `todo` in chunks (all at once, so they process in parallel), then wait for and collect each.
+    Returns summed usage (zero if --no-wait exits before anything is collected)."""
     from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
     from anthropic.types.messages.batch_create_params import Request
-    bdir = DATA / "classify" / slug / "batches"
-    bdir.mkdir(parents=True, exist_ok=True)
-    if args.resume:
-        batches = [(args.resume, todo)]
+    job.batches_dir.mkdir(parents=True, exist_ok=True)
+    zero = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
+    if resume:
+        batches = [(resume, todo)]
     else:
         batches = []
-        for i in range(0, len(todo), args.chunk):
-            chunk = todo[i:i + args.chunk]
-            reqs = [Request(custom_id=o["detection_id"], params=MessageCreateParamsNonStreaming(**build_request(o, p))) for o, p in chunk]
+        for i in range(0, len(todo), chunk):
+            piece = todo[i:i + chunk]
+            reqs = [Request(custom_id=job.id_of(item), params=MessageCreateParamsNonStreaming(**job.build_request(item))) for item in piece]
             batch = client.messages.batches.create(requests=reqs)
-            (bdir / f"{batch.id}.json").write_text(json.dumps({"id": batch.id, "submitted": time.time(), "n": len(reqs),
-                                                                "detection_ids": [o["detection_id"] for o, _ in chunk]}))
-            print(f"submitted batch {batch.id} with {len(reqs)} requests ({i + len(chunk)}/{len(todo)})")
-            batches.append((batch.id, chunk))
-        if args.no_wait:
+            (job.batches_dir / f"{batch.id}.json").write_text(json.dumps({"id": batch.id, "submitted": time.time(), "n": len(reqs),
+                                                                f"{job.id_field}s": [job.id_of(item) for item in piece]}))
+            print(f"submitted batch {batch.id} with {len(reqs)} requests ({i + len(piece)}/{len(todo)})")
+            batches.append((batch.id, piece))
+        if no_wait:
             print("collect later: --resume " + " / --resume ".join(b for b, _ in batches))
-            return
-    for batch_id, chunk in batches:
-        collect_batch(client, batch_id, chunk, res_dir)
+            return zero
+    total = dict(zero)
+    for batch_id, piece in batches:
+        t = collect_batch(client, job, batch_id, piece)
+        for kk in total:
+            total[kk] += t[kk]
+    return total
 
 
-def collect_batch(client, batch_id, todo, res_dir):
+def collect_batch(client, job, batch_id, todo):
     while True:
         b = client.messages.batches.retrieve(batch_id)
         if b.processing_status == "ended":
@@ -336,14 +366,15 @@ def collect_batch(client, batch_id, todo, res_dir):
     print(f"\nbatch {batch_id} ended: {b.request_counts}")
     total = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
     n_ok = n_bad = 0
+    by_id = {job.id_of(item): item for item in todo}
     for r in client.messages.batches.results(batch_id):
         did = r.custom_id
         if r.result.type == "succeeded":
             try:
-                rec, usage = parse_result(r.result.message)
+                rec, usage = job.parse(r.result.message)
                 for kk in total:
                     total[kk] += usage[kk]
-                (res_dir / f"{did}.json").write_text(json.dumps({"detection_id": did, "model": MODEL, "schema": SCHEMA_VERSION, "result": rec, "usage": usage, "batch": batch_id}))
+                (job.results_dir / f"{did}.json").write_text(json.dumps({job.id_field: did, "model": MODEL, "schema": job.schema_version, "result": rec, "usage": usage, "batch": batch_id}))
                 n_ok += 1
                 continue
             except (ValueError, json.JSONDecodeError) as e:
@@ -351,21 +382,22 @@ def collect_batch(client, batch_id, todo, res_dir):
         else:
             err = f"batch:{r.result.type}"
         # one retry, synchronously, then drop
-        o = next((o for o, _ in todo if o["detection_id"] == did), None)
-        if o is not None:
+        item = by_id.get(did)
+        if item is not None:
             try:
-                msg = client.messages.create(**build_request(o, DATA / "crops" / f"{did}.jpg"))
-                rec, usage = parse_result(msg)
+                msg = client.messages.create(**job.build_request(item))
+                rec, usage = job.parse(msg)
                 for kk in total:
                     total[kk] += usage[kk]
-                (res_dir / f"{did}.json").write_text(json.dumps({"detection_id": did, "model": MODEL, "schema": SCHEMA_VERSION, "result": rec, "usage": usage, "retried": err}))
+                (job.results_dir / f"{did}.json").write_text(json.dumps({job.id_field: did, "model": MODEL, "schema": job.schema_version, "result": rec, "usage": usage, "retried": err}))
                 n_ok += 1
                 continue
             except Exception as e:
                 err = f"{err} then {type(e).__name__}"
-        write_drop(res_dir, did, err)
+        write_drop(job.results_dir, did, err)
         n_bad += 1
     print(f"results: {n_ok} ok, {n_bad} dropped   usage {total}   cost ${cost_usd(total, batch=True):.3f}")
+    return total
 
 
 def write_output(slug, obs_all, res_dir, crops_dir):

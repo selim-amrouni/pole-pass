@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pole Pass · Candidate double poles · {{LOCATION}}</title>
+<meta name="description" content="Candidate double poles in {{LOCATION}} — an old pole left standing beside its replacement — found by reading public street photographs. Model estimates from public imagery, not a utility inventory.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:wght@500&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<link rel="stylesheet" href="doubles.css?v={{BUILD}}">
+</head>
+<body>
+<div class="unlisted-bar">Candidate double poles read from public street photographs. Model estimates, ungraded, and not a utility inventory &mdash; every row needs checking against MMLD's own records before anyone is dispatched.</div>
+<header class="hdr">
+  <span class="brand">Pole Pass</span>
+  <span class="loc">{{LOCATION}} &middot; candidate double poles</span>
+  <a class="notice-inline" href="#methods" title="{{VALIDATION_NOTICE}}">{{VALIDATION_SHORT}}</a>
+  <nav>{{CONTACT_NAV}}</nav>
+</header>
+
+<main>
+  <section class="preamble">
+    <p>These are candidate double poles &mdash; an old pole left standing beside its replacement &mdash; found by reading public street photographs. They come from public Mapillary imagery, not from a utility inventory: this is what a camera happened to drive past, not what is in the field. Every row needs checking against MMLD's own records before anyone is dispatched. A photo date is when the picture was taken, not when the pole was set or when it was removed. A pole that carries no flag here has not been inspected &mdash; most of Marblehead has no usable photograph at all. The maintenance line is traced by hand from a map the Light Department published: it is approximate, it allocates maintenance only, and both MMLD and Verizon jointly own every pole in town.</p>
+  </section>
+
+  <section class="stats" id="stats" aria-label="Summary statistics"></section>
+
+  <div class="toolbar" id="toolbar" role="group" aria-label="Filters">
+    <div class="fgroup">
+      <span class="fl">Maintainer</span>
+      <select id="f-maintainer" aria-label="Filter by maintainer">
+        <option value="all">All</option>
+        <option value="MMLD">MMLD</option>
+        <option value="VERIZON">Verizon</option>
+        <option value="UNCERTAIN">Uncertain</option>
+      </select>
+    </div>
+    <div class="fgroup">
+      <span class="fl">Minimum confidence</span>
+      <div class="rangewrap"><input type="range" id="f-confidence" min="0" max="1" step="0.05" value="0" aria-label="Minimum model confidence"><span id="f-confidence-n" class="mono">0.00</span></div>
+    </div>
+    <div class="fgroup">
+      <span class="fl">Model says duplicate detection</span>
+      <select id="f-dup" aria-label="Filter by duplicate-detection call">
+        <option value="all">All</option>
+        <option value="hide">Hide</option>
+        <option value="only">Only</option>
+      </select>
+    </div>
+    <div class="fgroup">
+      <span class="fl">Model says different depths</span>
+      <select id="f-depth" aria-label="Filter by different-depths call">
+        <option value="all">All</option>
+        <option value="hide">Hide</option>
+        <option value="only">Only</option>
+      </select>
+    </div>
+    <span class="spacer"></span>
+    <button class="btn" id="reset-filters">Reset filters</button>
+    <button class="btn" id="export-csv">Export CSV (with reviews)</button>
+  </div>
+  <div id="count" aria-live="polite"></div>
+
+  <div class="ws">
+    <section class="tablewrap" aria-label="Candidate double poles">
+      <table id="table">
+        <thead>
+          <tr>
+            <th class="mono">Pair id</th>
+            <th class="mono">Lat</th>
+            <th class="mono">Lon</th>
+            <th>Street</th>
+            <th>Gap<span class="sub">The model's visual estimate of the distance between the two pole bases. A real double usually stands under 3 m apart; the wider a gap, the more likely these are two unrelated poles.</span></th>
+            <th>Maintainer<span class="sub">Inferred from the Light Department's published maintenance map. Approximate, maintenance only &mdash; both parties jointly own all poles in town.</span></th>
+            <th>Earliest photo</th>
+            <th>Latest photo</th>
+            <th>Confidence</th>
+            <th>Reason</th>
+            <th>Photo</th>
+            <th>Open in<span class="sub">Street View is a second provider on a different date &mdash; an independent check on whether the pair still stands.</span></th>
+            <th>Reviewer decision</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </section>
+    <section class="mapwrap" aria-label="Map">
+      <div id="map"></div>
+      <div class="map-state" id="map-state" hidden></div>
+      <div class="legend" id="legend"></div>
+    </section>
+  </div>
+
+  <section class="methods" id="methods"></section>
+</main>
+
+<footer class="foot"><span>{{ATTRIBUTION}}</span><span class="muted">Generated {{GENERATED}} &middot; dataset <span class="mono">{{VERSION}}</span> &middot; counts are model estimates, ungraded</span></footer>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" onerror="window.__maplibreFailed=true"></script>
+<script src="data.js?v={{BUILD}}"></script>
+<script src="doubles.js?v={{BUILD}}"></script>
+</body>
+</html>
