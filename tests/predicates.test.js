@@ -89,3 +89,144 @@ test('published data.js flags match the shared predicate (dedupe.py and predicat
   assert.equal(s.records, D.records.length);
   assert.equal(s.utility + s.other, s.records);
 });
+
+const MS_MONTH = 365.25 / 12 * 86400000;
+
+test('monthsSince, isRecent, and ageLabel derive age from a photo capture date at view time', () => {
+  const now = Date.UTC(2026, 5, 15);
+  assert.equal(PP.monthsSince(null, now), null);
+  assert.equal(PP.monthsSince(0, now), null);
+  assert.equal(PP.monthsSince(now, now), 0);
+  assert.equal(PP.monthsSince(now - 5.4 * MS_MONTH, now), 5);
+  assert.equal(PP.ageLabel(null, now), 'date unknown');
+  assert.equal(PP.ageLabel(0, now), 'date unknown');
+  assert.equal(PP.ageLabel(now - 10 * 86400000, now), 'this month');
+  assert.equal(PP.ageLabel(now - 5.4 * MS_MONTH, now), '5 mo ago');
+  assert.equal(PP.ageLabel(now - 12.4 * MS_MONTH, now), '1 yr ago');
+  assert.equal(PP.ageLabel(now - 21.4 * MS_MONTH, now), '1 yr 9 mo ago');
+  assert.equal(PP.RECENT_MONTHS, 24);
+  assert.equal(PP.isRecent(rec({ shown: { ts: now } }), now), true);
+  assert.equal(PP.isRecent(rec({ shown: { ts: now - 23.9 * MS_MONTH } }), now), true);
+  assert.equal(PP.isRecent(rec({ shown: { ts: now - 24.4 * MS_MONTH } }), now), false, '24 months and older is not recent');
+  assert.equal(PP.isRecent(rec({ shown: { ts: null } }), now), false, 'date unknown is not recent');
+});
+
+test('flagSupport reports which photos back a flag, distinct drives, and what the latest photo shows', () => {
+  const r = rec({ frames: [{ lean: 'severe', ts: 100, seq: 1 }, { lean: 'none', ts: 200, seq: 1 }, { lean: 'moderate', ts: 300, seq: 2 }] });
+  const s = PP.flagSupport(r, 'lean');
+  assert.equal(s.n, 3);
+  assert.equal(s.supporting.length, 2);
+  assert.equal(s.drives, 2, 'distinct frame.seq among supporting frames');
+  assert.equal(s.latest.ts, 300);
+  assert.equal(s.latestStatus, 'supports');
+
+  const absentLatest = rec({ frames: [{ lean: 'severe', ts: 100, seq: 1 }, { lean: 'none', ts: 200, seq: 1 }] });
+  assert.equal(PP.flagSupport(absentLatest, 'lean').latestStatus, 'absent');
+
+  const unclearLatest = rec({ frames: [{ lean: 'severe', ts: 100, seq: 1 }, { lean: 'unclear', ts: 200, seq: 1 }] });
+  assert.equal(PP.flagSupport(unclearLatest, 'lean').latestStatus, 'unclear');
+
+  const noDated = rec({ frames: [{ lean: 'severe', seq: 1 }] });
+  assert.equal(PP.flagSupport(noDated, 'lean').latest, null, 'no dated frame means no latest');
+  assert.equal(PP.flagSupport(noDated, 'lean').latestStatus, null);
+
+  assert.equal(PP.flagSupport(rec({}), 'nope'), null, 'unknown key');
+
+  const veg = rec({ frames: [{ veg: 'touching', ts: 1, seq: 1 }, { veg: 'near', ts: 2, seq: 2 }] });
+  assert.equal(PP.flagSupport(veg, 'vegetation').supporting.length, 1);
+  const att = rec({ frames: [{ att: 3, ts: 1, seq: 1 }, { att: 2, ts: 2, seq: 1 }] });
+  assert.equal(PP.flagSupport(att, 'att3').supporting.length, 1);
+});
+
+test('reviewableFlags lists condition, watch, and equipment flags for utility poles only', () => {
+  assert.deepEqual(PP.reviewableFlags(rec({ util: false, lean: 'severe' })), []);
+  assert.deepEqual(PP.reviewableFlags(rec({ lean: 'slight' })), ['lean_slight']);
+  assert.deepEqual(PP.reviewableFlags(rec({ att: 3 })), ['att3']);
+  assert.deepEqual(PP.reviewableFlags(rec({ xfmr: true })), ['xfmr']);
+  assert.deepEqual(PP.reviewableFlags(rec({ lean: 'severe', xarm: 'damaged', veg: 'touching', att: 5, xfmr: true })), ['lean', 'crossarm', 'vegetation', 'att3', 'xfmr']);
+});
+
+test('reviewState tracks decision progress per record; a note alone is not a decision', () => {
+  assert.equal(PP.reviewState(rec({ util: false }), null), null, 'nothing to review');
+  assert.equal(PP.reviewState(rec({ lean: 'severe' }), null), 'unreviewed');
+  const both = rec({ lean: 'severe', xfmr: true });
+  assert.equal(PP.reviewState(both, { flags: { lean: 'supported' } }), 'partial');
+  assert.equal(PP.reviewState(both, { flags: { lean: 'supported', xfmr: 'not_supported' } }), 'reviewed');
+  assert.equal(PP.reviewState(rec({ lean: 'severe' }), { flags: {}, note: 'looks fine' }), 'unreviewed', 'a note alone is not a decision');
+  assert.equal(PP.reviewState(rec({ lean: 'severe' }), { flags: { lean: 'supported' } }), 'reviewed', 'old-shape entry without updated still works');
+});
+
+test('reviewVerdict summarizes decided flags: all supported is ok, any not_supported is no, else cannot tell', () => {
+  assert.equal(PP.reviewVerdict(null), null);
+  assert.equal(PP.reviewVerdict({ flags: {} }), null);
+  assert.equal(PP.reviewVerdict({ flags: { lean: 'supported', xfmr: 'supported' } }), 'ok');
+  assert.equal(PP.reviewVerdict({ flags: { lean: 'supported', xfmr: 'not_supported' } }), 'no');
+  assert.equal(PP.reviewVerdict({ flags: { lean: 'supported', xfmr: 'cannot_tell' } }), 'ct');
+});
+
+test('reviewProgress counts reviewable, reviewed, and partial records', () => {
+  const records = [rec({ id: 'a', lean: 'severe' }), rec({ id: 'b', xfmr: true }), rec({ id: 'c', util: false })];
+  const reviews = { a: { flags: { lean: 'supported' } } };
+  const p = PP.reviewProgress(records, reviews);
+  assert.deepEqual(p, { reviewable: 2, reviewed: 1, partial: 0 });
+});
+
+test('applyFilters review status: unreviewed includes partial, reviewed requires every flag decided', () => {
+  const a = rec({ id: 'a', lean: 'severe' });
+  const b = rec({ id: 'b', lean: 'severe', xfmr: true });
+  const c = rec({ id: 'c', lean: 'severe' });
+  const reviews = { b: { flags: { lean: 'supported' } }, c: { flags: { lean: 'supported' } } };
+  const rows = [a, b, c];
+  assert.deepEqual(PP.applyFilters(rows, { flag: 'all', review: 'unreviewed', reviews }).map(r => r.id), ['a', 'b']);
+  assert.deepEqual(PP.applyFilters(rows, { flag: 'all', review: 'reviewed', reviews }).map(r => r.id), ['c']);
+  assert.deepEqual(PP.applyFilters(rows, { flag: 'all', review: 'all', reviews }).map(r => r.id), ['a', 'b', 'c']);
+});
+
+test('applyFilters recent switch uses state.now against the 24-month window; the numeric year form still works', () => {
+  const now = Date.UTC(2026, 5, 15);
+  const rows = [rec({ id: 'r', shown: { year: 2026, ts: now - 10 * MS_MONTH } }), rec({ id: 'o', shown: { year: 2020, ts: now - 30 * MS_MONTH } })];
+  assert.deepEqual(PP.applyFilters(rows, { flag: 'all', recent: true, now }).map(r => r.id), ['r']);
+  assert.deepEqual(PP.applyFilters(rows, { flag: 'all', recent: 2022 }).map(r => r.id), ['r'], 'older numeric year form still works');
+});
+
+test('summary.recent counts utility records within the recent window at the given time', () => {
+  const now = Date.UTC(2026, 5, 15);
+  const rows = [rec({ shown: { year: 2026, ts: now - 10 * MS_MONTH } }), rec({ shown: { year: 2020, ts: now - 30 * MS_MONTH } }), rec({ util: false, shown: { year: 2026, ts: now } })];
+  assert.equal(PP.summary(rows, now).recent, 1);
+});
+
+test('mergeReviews validates the import file shape and each decision', () => {
+  assert.match(PP.mergeReviews({}, null, {}).errors[0], /expected an object/, 'non-object incoming');
+  assert.match(PP.mergeReviews({}, {}, {}).errors[0], /expected an object/, 'missing decisions');
+  assert.match(PP.mergeReviews({}, { decisions: [] }, {}).errors[0], /expected an object/, 'decisions must not be an array');
+  let r = PP.mergeReviews({}, { decisions: { x: null } }, { x: true });
+  assert.match(r.errors[0], /malformed decision/, 'non-object decision');
+  r = PP.mergeReviews({}, { decisions: { x: { flags: { bogus: 'supported' } } } }, { x: true });
+  assert.match(r.errors[0], /unknown flag or value/, 'bad flag key');
+  r = PP.mergeReviews({}, { decisions: { x: { flags: { lean: 'maybe' } } } }, { x: true });
+  assert.match(r.errors[0], /unknown flag or value/, 'bad value');
+  r = PP.mergeReviews({}, { decisions: { x: { flags: {}, note: 5 } } }, { x: true });
+  assert.match(r.errors[0], /note is not text/, 'non-string note');
+});
+
+test('mergeReviews classifies each decision as new, same, conflict, or unknown; flags a newer local decision', () => {
+  const byId = { a: true, b: true };
+  const incoming = { decisions: {
+    a: { flags: { lean: 'supported' }, note: '', updated: '2026-01-01T00:00:00Z' },
+    b: { flags: { lean: 'supported' }, note: '', updated: '2026-01-01T00:00:00Z' },
+    z: { flags: { lean: 'supported' }, note: '', updated: '2026-01-01T00:00:00Z' },
+  } };
+  const local = { a: { flags: { lean: 'supported' }, note: '', updated: '2026-02-01T00:00:00Z' }, b: { flags: { lean: 'not_supported' }, note: '', updated: '2025-01-01T00:00:00Z' } };
+  const { errors, items } = PP.mergeReviews(local, incoming, byId);
+  assert.deepEqual(errors, []);
+  const byKind = Object.fromEntries(items.map(i => [i.id, i]));
+  assert.equal(byKind.a.kind, 'same');
+  assert.equal(byKind.b.kind, 'conflict');
+  assert.equal(byKind.b.localNewer, false, 'incoming is newer than local here');
+  assert.equal(byKind.z.kind, 'unknown');
+  const local2 = { b: { flags: { lean: 'not_supported' }, note: '', updated: '2026-03-01T00:00:00Z' } };
+  const { items: items2 } = PP.mergeReviews(local2, incoming, byId);
+  assert.equal(items2.find(i => i.id === 'b').localNewer, true, 'local decision is newer than the imported one');
+  const { items: items3 } = PP.mergeReviews({}, incoming, byId);
+  assert.equal(items3.find(i => i.id === 'a').kind, 'new');
+});

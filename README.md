@@ -34,10 +34,14 @@ territory; Hardwick, Vermont, a backcountry one, selectable in the header).
    images, plus a small `summary.json` of counts. `deploy.sh <slug> [<slug> ...]`
    pushes those folders to GitHub Pages, one territory per path, with a
    selector in the header fed by `web/territories.json` (name and kind: city,
-   suburb, or backcountry). The site root is the landing page from
-   `web/landing/`: what the project is, how it works, and one card per
-   deployed territory rendered from `territories.json`, which deploy.sh
-   assembles from `web/territories.json` and each bundle's `summary.json`.
+   suburb, or backcountry, shown as Urban, Suburban, Rural). The site root is
+   the landing page from `web/landing/`: a real annotated example photo, one
+   card per deployed territory (photo, pole-record count, photo years, share
+   within 24 months), method and limitations, rendered from `territories.json`,
+   which deploy.sh assembles from `web/territories.json` and each bundle's
+   `summary.json`. Crops are named by the shown photo's detection id, and the
+   example record is keyed the same way, because pole ids are renumbered by
+   every dedupe run.
    `deploy.sh --dry-run ...` builds the pages tree in a temp dir without
    pushing, for a local preview.
 
@@ -48,6 +52,18 @@ objects and never flagged. Greenpoint and Hardwick were classified before that
 label existed, so only their moderate and severe lean calls were resent
 (`classify.py --redo-lean moderate,severe`); the old results stay as
 `<id>.v<schema>.json`.
+
+The area page is a review tool: one flag filter at a time (issues, equipment,
+or slight lean under More filters), a photo-date range or a "within 24 months"
+switch, and All / Unreviewed / Reviewed. Every record's representative date is
+the capture date of the photo shown; ages count from it, never from the build
+date. Each flag lists the dated photos that show it and what the latest
+assessed photo shows; nothing is called resolved. Review decisions (Yes / No /
+Can't tell per flag, plus a note) stay in the browser, count a record as
+reviewed only when every flag has a decision, go into the filtered CSV and
+GeoJSON as `review_*` columns (blank = not reviewed), and can be exported and
+imported as JSON with a conflict preview. If the map library is blocked or the
+browser has no WebGL, the list takes the whole workspace and a Retry appears.
 
 Flags come in two tiers. Possible condition issues (lean moderate or severe,
 crossarm damaged, vegetation touching) are orange. Watch items (slight lean)
