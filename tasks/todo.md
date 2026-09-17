@@ -33,7 +33,7 @@ First three candidates (Tier 1, P1 call first, Not contacted, compact territory)
 - [x] GitHub repo https://github.com/selim-amrouni/pole-pass (public, MIT) + Pages at https://selim-amrouni.github.io/pole-pass/ via deploy.sh
 - [x] 16 issues filed for known problems and deferred work
 - [x] Stretch: Overpass diff vs OSM power=pole (osm.py, PR #24)
-- [ ] Writeup with every number traced to data/
+- [x] Writeup with every number traced to data/ (docs/writeup.md)
 
 ## Page rework (spec received 2026-09-15)
 Approach: move the page out of the report.py f-string into web/ (index.html template,
@@ -116,8 +116,8 @@ Plan: ~/.claude/plans/resilient-roaming-stallman.md. Four branches, PR each into
 - [x] 1. fix/push-brace (PR #23): push_brace pole_type (schema 2), classify --redo-lean moderate,severe in direct mode for both territories, dedupe tie order, page copy, test; close #22 with before/after severe counts
 - [x] 2. feature/osm-diff (PR #24): osm.py (Overpass power=pole + man_made=utility_pole, cached under data/osm/<slug>/), nearest-OSM-node per utility record, page filter "Not in OpenStreetMap", exports column, attribution; close #13
 - [x] 3. feature/landing (PR #25): web/landing/ root page fed by territories.json with per-bundle summary.json stats, deploy.sh copies it, suburb kind, About copy templated by location
-- [ ] 4. feature/reading: run.py gains locate/tilt/osm steps, Reading MA run (~$15), review, deploy all three
-- [ ] 5. docs/writeup.md, every number with its data/ path
+- [x] 4. feature/reading (PR #26): run.py end to end, Reading MA run ($14.87), reviewed, all three deployed 2026-09-17 with the landing page (gh-pages 988 MB)
+- [x] 5. docs/writeup.md, every number with its data/ path (precision still ungraded; the writeup says so)
 
 ### Push-brace rerun, Hardwick (2026-09-17, data/poles/hardwick-vermont/summary.json, logs/hardwick-redo-lean.log)
 - 255 photos resent (all moderate/severe first-pass calls), 0 dropped, $0.58 direct (costs.py: classify current direct).
