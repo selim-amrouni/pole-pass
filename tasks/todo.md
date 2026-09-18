@@ -260,5 +260,12 @@ itself precise is one string in `renderSummary()`.
   primary finding follows all seven issue filters generically.
 - Before/after screenshots captured from a `main` worktree build of the same area.
 
-### Not done
-- [ ] Not deployed. `./deploy.sh` with all five slugs once the screenshots are approved.
+### Deployed 2026-09-18
+- [x] `./deploy.sh` with all five slugs. Verified against the live URLs, not the exit code:
+      all five areas plus the landing page return 200, `territories.json` carries five entries
+      each with stats, every bundle serves the new `style.css`/`app.js` under its own build hash,
+      and driving https://selim-amrouni.github.io/pole-pass/marblehead-massachusetts/#pole=marb-00016&issue=double
+      in Chrome gives "3 of 27", leads with "Possible double pole", header above the fold.
+      Zero console exceptions and no horizontal scroll across five areas x four viewports.
+      Pages took ~90 s to switch over after the ref update.
+- Pre-existing and left alone: `/favicon.ico` 404s site-wide. Unrelated to this work.
