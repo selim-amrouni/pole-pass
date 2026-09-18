@@ -132,9 +132,11 @@ harmful, because a double pole's old member is often cut down to a stub and is t
 genuinely short. The ground line, not the height, is the cue that separates the two, and
 that is now what the prompt teaches.
 
-Still owed before anyone acts on this: a real graded sample. validate.py/grade.py have
-never been pointed at the double-pole schema, and 4 crops judged by the author is not a
-precision table. That is the single biggest gap in the deliverable and the page says so.
+No graded sample, by decision. validate.py/grade.py have never been pointed at the
+double-pole schema, and a handful of crops judged by the author is not a precision table.
+Grading is hand work and was deprioritised on 2026-09-18. The pages carry "Experimental
+results. The model's assessments have not been independently verified", which is what makes
+publishing ungraded calls honest -- that notice stays until a real precision number exists.
 
 ### Phase 0 closed
 The georeference is the part that had to be right, and it is checked twice: a
@@ -185,13 +187,14 @@ Rebuild from cache:
 (doubles.py must run BEFORE dedupe.py — dedupe reads candidates.jsonl for the `double` flag.)
 
 ### Open, in priority order
+(Precision grading is deliberately NOT on this list. Deprioritised 2026-09-18 -- it is hand
+work. validate.py/grade.py remain in the repo; the "not independently verified" notice on
+every page is the standing substitute and must not be removed while it is true.)
+
 - [ ] **Re-run Marblehead doubles.** Its 27 candidates predate both fixes: they were produced with
       the prompt anchor and pre-v3 schema, and include at least two streetlight false positives
       found by eye (MH-7b5bbf86, MH-fdad8b7b) plus one different-depths call (MH-786f670a). ~$0.30.
       `data/doubles/marblehead-massachusetts/results/` must be moved aside to force it.
-- [ ] **No graded precision sample for either double-pole area.** CLAUDE.md calls this the only part
-      of a writeup anyone will trust. `validate.py` + `grade.py` exist and have not been run on the
-      `double` flag at all. This is issue #1 territory.
 - [ ] Marblehead's `out/` still carries leftovers from the superseded `report_doubles.py`
       (candidates.csv, candidates.geojson, doubles.css, doubles.js). Harmless but confusing.
 - [ ] `report_doubles.py` + `web/doubles.*` are dead code — the bespoke page was replaced by the
