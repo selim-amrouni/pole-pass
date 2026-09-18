@@ -186,3 +186,33 @@ authority of an independent read, which is worse than no field at all. Either
 withhold it and let the model answer cold, or keep it and stop pretending the
 answer is independent. The general test is cheap: correlate what you told the model
 against what it told you back, on the subset you actually publish.
+
+## A schema field is not an enforcement mechanism (2026-09-18)
+Marblehead called a wooden pole beside a metal streetlight standard a double pole,
+and its own `reason` said so: "a straighter pole carrying a streetlight". The fix
+was schema v3's `other_pole_purpose`, asked before the double call, plus
+`adjudicate()` rejecting anything non-utility. On Newton Lower Falls it looked
+like a clean win -- 13 pairs had a streetlight as the second pole and the model
+called none of them doubles, so the gate never even had to fire.
+
+Re-running Marblehead under the same schema showed why that was the wrong
+conclusion. All three false positives I had confirmed by eye survived, and the
+model now labelled the second pole `utility` in every one -- including the pair
+whose v2 reason had explicitly called it a streetlight. The gate only fires when
+the model admits what it is looking at, and a model that misreads the pole also
+misreads the field about the pole. The count went 27 -> 34; I checked two of the
+eight new calls and both were poles receding down a road, not pairs.
+
+Reverted to the 27. Kept the free half of the rebuild: re-running dedupe and
+report over the ALREADY CACHED results picked up the measured separation, so
+Marblehead's "4 m apart" for visibly touching poles became "the two poles overlap
+in this photo" with no new model calls.
+
+**Pattern:** adding a field that asks the model to self-report the thing it is
+getting wrong validates on whichever dataset you tried it on and generalises
+nowhere. A gate is only as good as the input it gates on, and asking the same
+model is not an independent input. Geometry measured off the detection outlines
+IS independent, which is why the distance fix held on both towns and the schema
+fix did not. Also: two eyeballed crops per town is not evidence -- the thing that
+would actually settle this is the graded precision sample in validate.py, still
+not run, and no amount of prompt iteration substitutes for it.
