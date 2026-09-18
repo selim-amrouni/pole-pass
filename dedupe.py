@@ -79,7 +79,10 @@ def load_doubles(slug):
     for line in path.open():
         c = json.loads(line)
         res = c.get("result") or {}
-        if not res.get("is_double_pole"):
+        # doubles.adjudicate() is the verdict, not the model's raw is_double_pole: it drops calls the
+        # model's own output contradicts (a second pole that is a streetlight, a pair at different
+        # depths). Rows written before adjudication existed carry no "is_double", so fall back.
+        if not c.get("is_double", res.get("is_double_pole")):
             continue
         for fid in c.get("feature_ids", []):
             prev = out.get(str(fid))
@@ -87,7 +90,14 @@ def load_doubles(slug):
                 out[str(fid)] = {"pair_id": c["pair_id"], "feature_ids": [str(x) for x in c.get("feature_ids", [])],
                                  "confidence": res.get("confidence"),
                                  "reason": res.get("reason"), "maintainer": c.get("maintainer"),
-                                 "separation_m": res.get("separation_estimate_m"),
+                                 # measured off the detection boxes in the shared frame; the model's
+                                 # own separation_estimate_m is kept beside it, never in front of it
+                                 "separation_m": ((c.get("separation") or {}).get("gap_m")
+                                                  if (c.get("separation") or {}).get("gap_m") is not None
+                                                  else res.get("separation_estimate_m")),
+                                 "separation_model_m": res.get("separation_estimate_m"),
+                                 "separation_widths": (c.get("separation") or {}).get("widths_apart"),
+                                 "separation_overlap": (c.get("separation") or {}).get("boxes_overlap"),
                                  "cut_short": res.get("either_pole_cut_short"),
                                  "equipment_transferred": res.get("equipment_transferred"),
                                  "street": c.get("street"), "cross_street": c.get("cross_street"),

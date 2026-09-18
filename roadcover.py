@@ -27,9 +27,10 @@ import argparse
 import json
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import district
 import geo
 import osm
 import split
@@ -177,15 +178,21 @@ def main():
             sys.exit(f"missing {cov_dir / name}; run coverage.py first")
     bbox = json.load((cov_dir / "summary.json").open())["bbox"]
 
-    ring = split.town_ring(slug)
-    split_geo = split.load_split(slug)
-    line = split_geo["line"]  # the extended split LineString's two endpoints
+    ring = district.ring(slug)  # the district's cell when slug names one, else the OSM town relation
+    # The maintenance split is Marblehead-only: it exists because the Light Department published an
+    # MMLD/Verizon boundary. Most towns have a single investor-owned pole owner and no such map, so
+    # a missing split is the normal case, not an error -- every per-maintainer number below is then
+    # simply not computed. town_ring above is NOT optional: it is the town boundary itself.
+    try:
+        line = split.load_split(slug)["line"]  # the extended split LineString's two endpoints
+    except (FileNotFoundError, SystemExit):
+        line = None
 
     raw = osm.fetch_overpass(roads_query(bbox), DATA / "osm" / slug / "roads.json")
     ways = kept_ways(raw)
     samples = samples_for_ways(ways, ring, args.step)
     for s in samples:
-        s["maintainer"] = split.maintainer_of(s["lon"], s["lat"], line, buffer_m=BUFFER_M)
+        s["maintainer"] = split.maintainer_of(s["lon"], s["lat"], line, buffer_m=BUFFER_M) if line else None
 
     images = [json.loads(l) for l in (cov_dir / "images.jsonl").open()]
     features = [json.loads(l) for l in (cov_dir / "map_features.jsonl").open()]
@@ -193,7 +200,7 @@ def main():
     town_images = [im for im in images if in_town(im["lon"], im["lat"], ring, ring_bbox)]
     town_features = [f for f in features if in_town(f["lon"], f["lat"], ring, ring_bbox)]
     for f in town_features:
-        f["maintainer"] = split.maintainer_of(f["lon"], f["lat"], line, buffer_m=BUFFER_M)
+        f["maintainer"] = split.maintainer_of(f["lon"], f["lat"], line, buffer_m=BUFFER_M) if line else None
 
     # Coverage matches against EVERY image, not just in-town ones: a photographer standing a
     # few metres outside the (legally generous, offshore-extended) town line can still document
@@ -210,7 +217,7 @@ def main():
 
     overall_frac = coverage_share(samples, covered)
     by_half = {}
-    for half in ("MMLD", "VERIZON", "UNCERTAIN"):
+    for half in ("MMLD", "VERIZON", "UNCERTAIN") if line else ():
         half_samples = [s for s in samples if s["maintainer"] == half]
         by_half[half] = {
             "n_samples": len(half_samples),
@@ -235,7 +242,7 @@ def main():
             "n_images": len(subset),
             "covered_fraction": round(coverage_share(samples, cov_v), 4),
             "by_maintainer": {h: round(coverage_share([s for s in samples if s["maintainer"] == h], cov_v), 4)
-                              for h in ("MMLD", "VERIZON") if any(s["maintainer"] == h for s in samples)},
+                              for h in (("MMLD", "VERIZON") if line else ()) if any(s["maintainer"] == h for s in samples)},
         }
 
     rows = street_rows(samples, covered, args.step)
@@ -250,17 +257,25 @@ def main():
     recent_share = n_recent / len(dated) if dated else 0.0
     stale_share = 1 - recent_share if dated else 0.0
 
+    # A rolling three-year window from run time, separate from the fixed RECENT_CUTOFF above. A pole
+    # photographed in 2019 says nothing about whether a double still stands today, so this is the
+    # share that decides whether a town is worth a pass, and it has to move with the calendar.
+    three_year_ms = int((datetime.now(tz=timezone.utc) - timedelta(days=3 * 365)).timestamp() * 1000)
+    n_3y = sum(1 for c in dated if c >= three_year_ms)
+    share_3y = n_3y / len(dated) if dated else 0.0
+
     town_seqs = {im.get("sequence_id") for im in town_images}
     seqs_on_road = {im.get("sequence_id") for im in town_images if img_on_road.get(im["id"])}
 
     pole_features = [f for f in town_features if f.get("value") in POLE_VALUES]
     by_value = Counter(f["value"] for f in pole_features)
     by_value_half = defaultdict(Counter)
-    for f in pole_features:
+    for f in pole_features if line else ():
         by_value_half[f["value"]][f["maintainer"]] += 1
 
     verdict, rule = verdict_for(overall_frac, recent_share)
-    half_covs = {h: by_half[h]["covered_fraction"] for h in ("MMLD", "VERIZON") if by_half[h]["covered_fraction"] is not None}
+    half_covs = {h: by_half[h]["covered_fraction"] for h in ("MMLD", "VERIZON")
+                 if by_half.get(h, {}).get("covered_fraction") is not None}
     half_diff = abs(half_covs["MMLD"] - half_covs["VERIZON"]) if len(half_covs) == 2 else None
 
     out_dir = DATA / "roadcover" / slug
@@ -279,6 +294,8 @@ def main():
         "captures_by_quarter": dict(sorted(by_quarter.items())),
         "recent_cutoff": RECENT_CUTOFF, "images_recent": n_recent, "images_recent_share": round(recent_share, 4),
         "images_stale_share": round(stale_share, 4),
+        "three_year_cutoff": datetime.fromtimestamp(three_year_ms / 1000, tz=timezone.utc).date().isoformat(),
+        "images_last_3y": n_3y, "images_last_3y_share": round(share_3y, 4),
         "road_coverage_overall": round(overall_frac, 4),
         "road_coverage_by_maintainer": by_half,
         "road_coverage_by_vintage": by_vintage,
@@ -304,11 +321,15 @@ def main():
     print(f"  by year   {summary['captures_by_year']}")
     print(f"  by quarter {summary['captures_by_quarter']}")
     print(f"recent ({RECENT_CUTOFF}+)   {n_recent:>7} / {len(dated)}  = {recent_share:.1%}")
+    print(f"last 3 years          {n_3y:>7} / {len(dated)}  = {share_3y:.1%}   (since {summary['three_year_cutoff']})"
+          if dated else "last 3 years          no dated in-town imagery")
     print(f"\nroad coverage overall  {overall_frac:.1%}  ({sum(covered.values())}/{len(samples)} samples within {args.radius:.0f} m of an image)")
-    for half in ("MMLD", "VERIZON", "UNCERTAIN"):
+    for half in ("MMLD", "VERIZON", "UNCERTAIN") if line else ():
         h = by_half[half]
         cov_str = f"{h['covered_fraction']:.1%}" if h["covered_fraction"] is not None else "n/a"
         print(f"  {half:9} {h['n_samples']:>6} samples  {h['length_m']:>9,.0f} m  coverage {cov_str}")
+    if not line:
+        print("  (no maintenance split for this town: one pole owner, or no published boundary)")
     if half_diff is not None:
         flag = "  <-- differs by more than 10pp, biases any MMLD-vs-Verizon comparison" if half_diff > HALF_DIFF_FLAG else ""
         print(f"  MMLD vs Verizon coverage gap: {half_diff:.1%}{flag}")

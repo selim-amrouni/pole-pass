@@ -137,3 +137,52 @@ shape, the existing shape usually wins. A literal reading that produces a
 one-off surface is worth a single question up front, and the answer was
 predictable from the repo: every area page is generated from one template for a
 reason.
+
+## Don't fit a threshold to one confirmed error (2026-09-18)
+Chasing the Marblehead double-pole distance bug, I measured separation from the
+two detection boxes in the shared frame, which worked: a pair whose poles visibly
+cross went from "4 m" (the model's guess) and "5.90 m" (the map-feature haversine)
+to 0.12 m measured, with the boxes overlapping. Good. Then I added a second
+geometric rule -- reject the pair when one pole's box is more than 2x wider than
+the other, on the theory that it means one is much further away -- and it threw out
+11 of Marblehead's 27 candidates.
+
+The threshold was invented, not measured. Width ratio's median among the 27 real
+doubles is 1.83, so 2.0 cuts through the middle of the good calls; pole boxes are
+only tens of pixels wide and the far pole is routinely occluded by the near one,
+so at that scale the ratio is mostly noise. I had exactly ONE visually confirmed
+different-depths false positive to fit against.
+
+**Pattern:** a measurement that replaces a fabricated number is worth shipping on
+its own evidence. A threshold that silently drops rows needs its own validation,
+and n=1 is not it. When the sample is too small to set a cutoff, surface the
+number as sortable evidence and let the reviewer see the outlier -- the rejected
+pair now sits at the top of the gap column instead of vanishing. Gate only on
+what is definitional (a streetlight is not a utility pole) rather than on a
+tuned pixel heuristic.
+
+## Never hand a model the number you are asking it to estimate (2026-09-18)
+doubles.py asked the model for `separation_estimate_m`, "your best visual estimate
+of the ground distance between the two pole bases" -- and in the same prompt told
+it "the two flagged map features are about X m apart on the ground", X being the
+triangulated map distance we already knew was unreliable. The model largely handed
+X back. On the rows that actually get published, 11 of 13 estimates landed within
+0.5 m of what it was told, against 28% of the rows that were not published.
+
+So the field was never a second opinion. It was the bad number restated in a place
+that looked like corroboration, and it was the whole of the reported bug: the
+Marblehead pair whose poles visibly cross was called "4 m apart" because the map
+said 5.90 m and the model rounded it back. Two independent-looking numbers that
+were really one number.
+
+Deleting the sentence dropped the echo to 3/13 published (6/175 overall) and moved
+the estimate closer to the separation measured off the detection outlines. It also
+changed two of thirteen double/not-double calls, so the anchor had been steering
+the judgement and not merely the number.
+
+**Pattern:** when a prompt supplies context AND asks for a judgement, check whether
+the context contains the answer. If it does, the output is an echo with the
+authority of an independent read, which is worse than no field at all. Either
+withhold it and let the model answer cold, or keep it and stop pretending the
+answer is independent. The general test is cheap: correlate what you told the model
+against what it told you back, on the subset you actually publish.

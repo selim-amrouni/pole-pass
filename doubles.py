@@ -39,11 +39,13 @@ import json
 import sys
 import time
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PIL import Image
 
 import classify  # Job/run_batch/run_direct land here; see wait_for_job_contract(). classify.py is not modified.
+import district
 import fetch
 import geo
 import mvt
@@ -55,7 +57,7 @@ from dedupe import haversine_m
 UTILITY_VALUE = "object--support--utility-pole"
 DEFAULT_RADIUS_M = 6.0
 DEFAULT_FRAMES = 2
-SCHEMA_VERSION = 2  # 2: poles_at_different_depths added after measuring how often map features collapse (2026-09-17)
+SCHEMA_VERSION = 3  # 3: other_pole_purpose, after Marblehead called a pole beside a streetlight a double (2026-09-18)
 CROSS_STREET_MAX_M = 120.0
 WORKERS = 8
 
@@ -100,9 +102,15 @@ Definitions:
 - two_poles_visible: the crop actually shows two separate pole structures, not one pole seen once.
 - likely_duplicate_detection: true when this crop shows what is almost certainly ONE physical pole
   that the upstream detector reported as two nearby map features.
-- is_double_pole: true only when two_poles_visible is true AND the pair reads as an old pole left
-  standing beside its in-service replacement, not two poles serving unrelated purposes (for
-  example a utility pole next to a street light or sign post).
+- other_pole_purpose: what the SECOND pole is, judged on what it carries and what it is made of --
+  utility (a wooden or composite distribution pole, whether or not it still carries anything),
+  street_light (a metal or concrete lighting standard, usually smooth, tapered and carrying a lamp
+  arm), traffic_signal, sign_post, other, unclear. Answer this BEFORE is_double_pole and let it
+  decide: a distribution pole standing next to a lighting standard is an ordinary street, not a
+  double pole, however close together the two are. This is the single most common way this task is
+  got wrong, so do not round street_light up to utility because the pair looks like a double.
+- is_double_pole: true only when two_poles_visible is true AND other_pole_purpose is utility AND the
+  pair reads as an old pole left standing beside its in-service replacement.
 - equipment_transferred: whether the OLDER of the two poles has had its electric equipment (main
   conductors, transformer, crossarm hardware) removed -- yes (clearly gone), partial (some removed,
   some remains), no (electric still appears intact), unclear.
@@ -127,6 +135,8 @@ DOUBLE_SCHEMA = {
     "properties": {
         "two_poles_visible": {"type": "boolean"},
         "likely_duplicate_detection": {"type": "boolean"},
+        "other_pole_purpose": {"type": "string",
+                               "enum": ["utility", "street_light", "traffic_signal", "sign_post", "other", "unclear"]},
         "is_double_pole": {"type": "boolean"},
         "equipment_transferred": {"type": "string", "enum": ["yes", "partial", "no", "unclear"]},
         "old_pole_lower_attachments_only": {"type": "string", "enum": ["yes", "no", "unclear"]},
@@ -137,7 +147,7 @@ DOUBLE_SCHEMA = {
         "confidence": {"type": "number"},
         "reason": {"type": "string"},
     },
-    "required": ["two_poles_visible", "likely_duplicate_detection", "is_double_pole",
+    "required": ["two_poles_visible", "likely_duplicate_detection", "other_pole_purpose", "is_double_pole",
                  "equipment_transferred", "old_pole_lower_attachments_only", "either_pole_cut_short",
                  "either_pole_leaning", "poles_at_different_depths", "separation_estimate_m",
                  "confidence", "reason"],
@@ -146,12 +156,24 @@ DOUBLE_SCHEMA = {
 
 
 # ---------------------------------------------------------------- pair id (stable, order-independent)
-def make_pair_id(fid_a, fid_b):
+PINNED_PREFIX = {"marblehead-massachusetts": "MH"}  # its results/ and crops are already keyed MH-; changing it orphans them
+
+
+def pair_prefix(slug):
+    """Short per-town tag for pair ids. data/doubles/crops/ is a single global directory (like
+    data/crops/), so without a per-town tag two towns' pairs could collide in it. Marblehead is
+    pinned to the tag its cached run already uses."""
+    if slug in PINNED_PREFIX:
+        return PINNED_PREFIX[slug]
+    return (slug.split("-")[0][:3] or "xx").upper()
+
+
+def make_pair_id(fid_a, fid_b, prefix):
     """Stable across reruns and independent of any numbering -- pole/feature ids renumber or get
     re-clustered elsewhere in this project (see dedupe.py), so the id is derived from the two
     feature ids themselves, sorted, never from list position."""
     lo, hi = sorted([str(fid_a), str(fid_b)])
-    return "MH-" + hashlib.sha1(f"{lo}:{hi}".encode()).hexdigest()[:8]
+    return f"{prefix}-" + hashlib.sha1(f"{lo}:{hi}".encode()).hexdigest()[:8]
 
 
 # ---------------------------------------------------------------- pair screen (grid, not O(n^2))
@@ -234,7 +256,60 @@ def select_frames(dets_a, dets_b, frames_n):
     if not ranked:
         return "no_shared_frame", []  # every shared image's geometry failed to decode
     ranked.sort(key=lambda r: r["area"], reverse=True)
-    return "ok", ranked[:frames_n]
+    # frames_n=None returns the whole ranking. process_pair needs that, because a frame's capture
+    # date only arrives with its image metadata, so the date filter cannot be applied until after
+    # this ranking exists -- capping here first would discard recent frames sight unseen.
+    return "ok", ranked if frames_n is None else ranked[:frames_n]
+
+
+# ---------------------------------------------------------------- separation measured from the frame
+# Why this exists. Two numbers for "how far apart are these poles" already existed and BOTH are bad:
+#
+#   distance_m            haversine between the two Mapillary map-feature positions. Those positions
+#                         are triangulated from photographs, and depth along the camera ray is the
+#                         worst-constrained axis, so touching poles can land metres apart.
+#   separation_estimate_m the model eyeballing metres off a crop. Measured on the Marblehead run it
+#                         clusters on round numbers and overestimates badly: pair MH-dd2a587e, whose
+#                         two poles visibly cross each other, was called 4 m (and 5.90 m by the map).
+#
+# This is a third number and, unlike those two, it is a measurement of the evidence itself. The two
+# detection boxes in the shared frame give the poles' apparent width and their apparent separation in
+# the same units, and that RATIO is what carries the distance:
+#
+#     ground separation / pole diameter  ~=  apparent separation / apparent width
+#
+# so separation ~= widths_apart * POLE_DIAMETER_M. The ratio cancels focal length and image size, and
+# it survives equirectangular panoramas, where horizontal pixels are proportional to bearing and both
+# quantities scale together. It is only valid while both poles are at similar depth, which is exactly
+# the double-pole case -- `depth_ratio` below reports when that assumption breaks rather than hiding it.
+POLE_DIAMETER_M = 0.30   # nominal class-4/5 distribution pole at breast height; a stated assumption, not a measurement
+SAME_DEPTH_MAX_RATIO = 2.0  # apparent widths differing by more than this mean one pole is much further away
+
+
+def frame_separation(box_a, box_b):
+    """Ground separation of two poles, measured from their detection boxes in one shared frame.
+
+    Boxes are (x0, y0, x1, y1) normalized 0..1. Only x is used for the ratio, so normalizing x by
+    width and y by height does not distort it. Returns None when either box is degenerate.
+    """
+    wa, wb = box_a[2] - box_a[0], box_b[2] - box_b[0]
+    if wa <= 0 or wb <= 0:
+        return None
+    mean_w = (wa + wb) / 2
+    dx = abs((box_a[0] + box_a[2]) / 2 - (box_b[0] + box_b[2]) / 2)
+    widths_apart = dx / mean_w
+    return {
+        "widths_apart": round(widths_apart, 2),
+        "gap_m": round(widths_apart * POLE_DIAMETER_M, 2),
+        # Boxes that overlap horizontally cannot be two poles standing apart; on the Marblehead run
+        # this was true of 13/27 called doubles but only 7/159 assessed non-doubles.
+        "boxes_overlap": bool(min(box_a[2], box_b[2]) - max(box_a[0], box_b[0]) > 0),
+        # >1 means one pole looks wider, i.e. nearer. Past SAME_DEPTH_MAX_RATIO the ratio method's
+        # equal-depth assumption has failed and gap_m should not be believed.
+        "depth_ratio": round(max(wa, wb) / min(wa, wb), 2),
+        "same_depth": bool(max(wa, wb) / min(wa, wb) <= SAME_DEPTH_MAX_RATIO),
+        "pole_diameter_assumed_m": POLE_DIAMETER_M,
+    }
 
 
 # ---------------------------------------------------------------- fetch + crop (reuses fetch.py's own caches)
@@ -312,7 +387,7 @@ def nearest_named_way(lon, lat, ways, exclude_name=None, max_m=None):
 
 
 # ---------------------------------------------------------------- per-pair processing (threaded: Graph API calls)
-def process_pair(pair, slug, token, frames_n, crops_dir):
+def process_pair(pair, slug, token, frames_n, crops_dir, since_ms=None):
     """Enrich one screened pair with shared-frame selection and a crop, up to (but not including)
     classification. Returns a dict merged into the candidate row; never raises for an ordinary
     "nothing more to do" outcome -- those are statuses, not failures."""
@@ -323,18 +398,30 @@ def process_pair(pair, slug, token, frames_n, crops_dir):
         return {"status": "feature_not_cached", "capture_first": None, "capture_last": None,
                 "chosen_image_id": None, "chosen_mapillary_url": None, "crop": None, "n_shared_frames": 0}
 
-    status, kept = select_frames(dets_a, dets_b, frames_n)
+    status, ranked = select_frames(dets_a, dets_b, None)   # None: whole ranking, filtered below
     if status == "no_shared_frame":
         return {"status": status, "capture_first": None, "capture_last": None,
                 "chosen_image_id": None, "chosen_mapillary_url": None, "crop": None, "n_shared_frames": 0}
 
-    # fetch metadata for every kept frame (capture_first/last), crop only the best (largest-area) one
-    captured = []
-    for k in kept:
+    # Walk the ranking, keeping the best frames that are also recent enough. The date cannot be part
+    # of the ranking itself -- it arrives with the image metadata -- and for a double-pole claim the
+    # photo date is the evidence, so the largest view of a pair is worthless if it is from 2018.
+    # Metadata is cached, so the extra look-ups cost nothing on a rerun.
+    captured, kept = [], []
+    for k in ranked:
+        if len(kept) >= frames_n:
+            break
         im, _ = fetch_image(slug, k["image_id"], token)
         k["captured_at"] = im.get("captured_at")
+        if since_ms is not None and (k["captured_at"] or 0) < since_ms:
+            continue
+        kept.append(k)
         if k["captured_at"]:
             captured.append(k["captured_at"])
+    if not kept:
+        # Shared frames exist, but none since the cutoff: no recent photo shows both poles together.
+        return {"status": "no_recent_shared_frame", "capture_first": None, "capture_last": None,
+                "chosen_image_id": None, "chosen_mapillary_url": None, "crop": None, "n_shared_frames": 0}
     chosen = kept[0]
     _, thumb = fetch_image(slug, chosen["image_id"], token)
     crop_path, info = make_double_crop(pair["pair_id"], thumb, chosen["box_a"], chosen["box_b"], crops_dir)
@@ -349,6 +436,8 @@ def process_pair(pair, slug, token, frames_n, crops_dir):
             "capture_last": max(captured) if captured else None, "chosen_image_id": chosen["image_id"],
             "chosen_mapillary_url": f"https://www.mapillary.com/app/?pKey={chosen['image_id']}&focus=photo",
             "crop": str(crop_path.relative_to(ROOT)), "crop_path": crop_path,
+            # measured from the SAME frame the model is shown, so the number and the picture agree
+            "separation": frame_separation(chosen["box_a"], chosen["box_b"]),
             "crop_size": tuple(info["crop_size"]), "n_shared_frames": len(kept)}
 
 
@@ -356,8 +445,13 @@ def process_pair(pair, slug, token, frames_n, crops_dir):
 def build_double_request(item):
     data = base64.standard_b64encode(item["crop_path"].read_bytes()).decode()
     when = time.strftime("%Y-%m", time.gmtime(item["captured_at"] / 1000)) if item.get("captured_at") else "unknown"
-    context = (f"Crop from a photo taken {when}. The two flagged map features are about "
-               f"{item['distance_m']:.1f} m apart on the ground. Return the JSON record.")
+    # Deliberately NOT told how far apart the two map features are. That number is triangulated and
+    # unreliable along the camera ray, and measured on both runs the model simply handed it back as
+    # its own separation_estimate_m -- 85% within 0.5 m on the rows that get published, against 28%
+    # elsewhere. Withholding it makes the model's estimate an independent second opinion rather than
+    # an echo, and stops a bad number from steering the double call itself. The separation the page
+    # shows is measured from the detection outlines by frame_separation(), not asked for here.
+    context = f"Crop from a photo taken {when}. Return the JSON record."
     return {
         "model": classify.MODEL,
         "max_tokens": 500,
@@ -383,6 +477,33 @@ def parse_double_result(msg):
              "cache_read": getattr(msg.usage, "cache_read_input_tokens", 0) or 0,
              "cache_write": getattr(msg.usage, "cache_creation_input_tokens", 0) or 0}
     return rec, usage
+
+
+def adjudicate(result, separation):
+    """(is_double, rejected_because) -- the verdict the page shows, never result["is_double_pole"] raw.
+
+    The Marblehead run shipped false positives its own output already contradicted: MH-fdad8b7b's
+    reason called the second pole "a straighter pole carrying a streetlight" while the badge said
+    double, and MH-786f670a paired two poles down the street (7.9 pole-widths apart, one 3.2x wider
+    than the other) rather than a pair standing together. Both contradictions are mechanically
+    checkable, so they are checked here instead of being left to the model's prose. A rejection keeps
+    the row -- it just stops being a candidate, and rejected_because says why in plain words.
+    """
+    if not result or not result.get("is_double_pole"):
+        return False, None
+    purpose = result.get("other_pole_purpose")
+    if purpose in ("street_light", "traffic_signal", "sign_post"):
+        return False, f"the second pole is a {purpose.replace('_', ' ')}, not a utility pole"
+    if result.get("poles_at_different_depths"):
+        return False, "the two poles are at different distances from the camera, not standing together"
+    # Deliberately NOT gated on the frame geometry. depth_ratio looked like it should catch the
+    # different-depths case, but measured on Marblehead's 27 calls its median is 1.83, so any
+    # threshold tight enough to catch the one confirmed error also throws out a third of the good
+    # calls -- pole detection boxes are only tens of pixels wide and the far pole is routinely
+    # occluded by the near one, so the ratio is noise at this scale. One confirmed false positive is
+    # not enough to fit a threshold on. The geometry rides along on the row as evidence a reviewer
+    # can see and sort by; it does not silently drop rows.
+    return True, None
 
 
 def wait_for_job_contract(retries=10, wait_s=30):
@@ -418,11 +539,15 @@ def main():
     feats_path = DATA / "coverage" / slug / "map_features.jsonl"
     if not feats_path.exists():
         sys.exit(f"run coverage.py first, missing {feats_path}")
+    ring = district.ring(slug)  # the area boundary itself (district cell or town); required
+    # The maintenance split is Marblehead-only -- it exists because the Light Department published an
+    # MMLD/Verizon boundary. Everywhere else the poles are jointly owned by the electric utility and
+    # the telecom, and which of them is next to move its lines is precisely what is not public. So a
+    # missing split means no maintainer is claimed for any pair, not that the run cannot proceed.
     try:
-        ring = split.town_ring(slug)
         split_data = split.load_split(slug)
-    except (FileNotFoundError, SystemExit) as e:
-        sys.exit(f"run split.py first: {e}")
+    except (FileNotFoundError, SystemExit):
+        split_data = None
     roads_path = DATA / "osm" / slug / "roads.json"
     if not roads_path.exists():
         sys.exit(f"run roadcover.py first, missing {roads_path}")
@@ -435,12 +560,13 @@ def main():
     print(f"{slug}: {len(feats)} in-town utility-pole features")
 
     screened = pair_screen(points, args.radius)
+    prefix = pair_prefix(slug)
     pairs = []
     for a, b, d in screened:
         lo, hi = sorted([a, b])
         lon = (points[a][0] + points[b][0]) / 2
         lat = (points[a][1] + points[b][1]) / 2
-        pairs.append({"pair_id": make_pair_id(lo, hi), "feature_ids": [lo, hi],
+        pairs.append({"pair_id": make_pair_id(lo, hi, prefix), "feature_ids": [lo, hi],
                       "distance_m": round(d, 2), "lon": round(lon, 7), "lat": round(lat, 7)})
     pairs.sort(key=lambda p: p["pair_id"])
 
@@ -453,9 +579,9 @@ def main():
 
     # tag every pair with maintainer + street/cross_street from the midpoint alone -- this needs no
     # frame at all, so it applies uniformly whether or not the pair ever gets a crop
-    line, buffer_m = split_data["line"], split_data["buffer_m"]
+    line, buffer_m = (split_data["line"], split_data["buffer_m"]) if split_data else (None, None)
     for p in pairs:
-        p["maintainer"] = split.maintainer_of(p["lon"], p["lat"], line, buffer_m)
+        p["maintainer"] = split.maintainer_of(p["lon"], p["lat"], line, buffer_m) if line else None
         street, street_d = nearest_named_way(p["lon"], p["lat"], named_ways)
         cross, cross_d = nearest_named_way(p["lon"], p["lat"], named_ways, exclude_name=street, max_m=CROSS_STREET_MAX_M)
         p["street"] = street
@@ -464,13 +590,17 @@ def main():
         p["cross_street_distance_m"] = round(cross_d, 1) if cross_d is not None else None
 
     token = load_env().get("MAPILLARY_TOKEN", "")
+    # A district records its own imagery cutoff, so reruns reproduce the same vintage.
+    since_ms = district.since_ms(slug)
+    if since_ms:
+        print(f"  frames restricted to {datetime.fromtimestamp(since_ms/1000, tz=timezone.utc).date()} onward")
     crops_dir = DATA / "doubles" / "crops"
     results_dir = out_dir / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
     enriched, errors = {}, []
     with ThreadPoolExecutor(WORKERS) as ex:
-        futs = {ex.submit(process_pair, p, slug, token, args.frames, crops_dir): p for p in pairs}
+        futs = {ex.submit(process_pair, p, slug, token, args.frames, crops_dir, since_ms): p for p in pairs}
         for k, fut in enumerate(as_completed(futs), 1):
             p = futs[fut]
             try:
@@ -548,9 +678,15 @@ def write_candidates_and_summary(slug, pairs, enriched, results_dir, out_dir, ar
             status = "dropped"
         elif result is not None:
             status = "classified"
+        separation = e.get("separation")
+        is_double, rejected = adjudicate(result, separation)
         rows.append({**p, "status": status, "capture_first": e["capture_first"], "capture_last": e["capture_last"],
                      "n_shared_frames": e["n_shared_frames"], "chosen_image_id": e["chosen_image_id"],
-                     "chosen_mapillary_url": e["chosen_mapillary_url"], "crop": e["crop"], "result": result})
+                     "chosen_mapillary_url": e["chosen_mapillary_url"], "crop": e["crop"],
+                     # `separation` is measured from the frame; `is_double` is the adjudicated verdict.
+                     # Downstream must read these, not result["is_double_pole"] or the two old distances.
+                     "separation": separation, "is_double": is_double, "rejected_because": rejected,
+                     "result": result})
 
     with (out_dir / "candidates.jsonl").open("w") as fh:
         for r in rows:
@@ -558,31 +694,45 @@ def write_candidates_and_summary(slug, pairs, enriched, results_dir, out_dir, ar
 
     classified = [r for r in rows if r["result"]]
     n_dup = sum(1 for r in classified if r["result"]["likely_duplicate_detection"])
-    n_double = sum(1 for r in classified if r["result"]["is_double_pole"])
+    n_model_double = sum(1 for r in classified if r["result"]["is_double_pole"])
+    n_double = sum(1 for r in classified if r["is_double"])           # after adjudicate(): the candidate count
+    rejections = Counter(r["rejected_because"] for r in classified if r["rejected_because"])
+    by_purpose = Counter(r["result"].get("other_pole_purpose") for r in classified)
     confs = sorted(r["result"]["confidence"] for r in classified)
     conf_hist = Counter(min(3, int(c * 4)) for c in confs)  # 0-.25 / .25-.5 / .5-.75 / .75-1
     by_status = Counter(r["status"] for r in rows)
-    by_maintainer = Counter(r["maintainer"] for r in rows)
+    by_maintainer = Counter(r["maintainer"] for r in rows if r.get("maintainer"))
 
     cost = classify.cost_usd(usage, batch=(args.mode == "batch")) if usage and usage.get("input") else 0.0
     summary = {
         "slug": slug, "radius_m": args.radius, "frames_kept": args.frames,
         "pairs_screened": len(pairs), "by_status": dict(by_status),
-        "classified": len(classified), "likely_duplicate_detection": n_dup, "is_double_pole": n_double,
+        "classified": len(classified), "likely_duplicate_detection": n_dup,
+        "is_double_pole": n_double,                       # adjudicated; this is the candidate count
+        "model_said_double": n_model_double,              # before adjudicate(), for the gap to be visible
+        "rejected_by_adjudication": dict(rejections),
+        "other_pole_purpose": dict(by_purpose),
+        "pole_diameter_assumed_m": POLE_DIAMETER_M,
         "confidence_histogram": {"0.00-0.25": conf_hist.get(0, 0), "0.25-0.50": conf_hist.get(1, 0),
                                   "0.50-0.75": conf_hist.get(2, 0), "0.75-1.00": conf_hist.get(3, 0)},
-        "by_maintainer": dict(by_maintainer),
         "cost_usd": round(cost, 4),
         "attribution": "Imagery and detections: Mapillary, CC BY-SA 4.0. Roads and boundary: OpenStreetMap contributors, ODbL. Derived data: ODbL.",
-        "note": split.NOTE,
     }
+    if by_maintainer:  # only Marblehead has a published maintenance split; elsewhere there is nothing to say
+        summary["by_maintainer"] = dict(by_maintainer)
+        summary["note"] = split.NOTE
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
 
     print(f"\n{slug}: {len(pairs)} pairs screened, by status {dict(by_status)}")
     if classified:
-        print(f"  of {len(classified)} classified: {n_dup} likely duplicate detections, {n_double} real doubles")
+        print(f"  of {len(classified)} classified: {n_dup} likely duplicate detections, "
+              f"{n_model_double} called double by the model -> {n_double} candidates after adjudication")
+        for why, n in rejections.most_common():
+            print(f"      rejected {n:>4}: {why}")
+        print(f"  second pole was: {dict(by_purpose)}")
         print(f"  confidence distribution: {summary['confidence_histogram']}")
-    print(f"  by maintainer: {dict(by_maintainer)}")
+    if by_maintainer:
+        print(f"  by maintainer: {dict(by_maintainer)}")
     if cost:
         print(f"  cost: ${cost:.3f}")
     print(f"-> {out_dir.relative_to(ROOT)}/{{pairs.jsonl,candidates.jsonl,summary.json}}")

@@ -62,6 +62,17 @@ to its source photo.
    thumbnails after the merge-rule change). Pole-id references in code or tests
    go stale after any dedupe change; key by detection id or find by predicate.
 
+7b. `district.py` carves one village out of a town and makes it a first-class area:
+   a Voronoi cell of the OSM place nodes, clipped to the town ring, written as
+   `data/district/<slug>/district.geojson` plus a clipped copy of the town's
+   coverage rows. Newton's villages have no legal boundary and OSM holds them
+   only as points, so the cell is a partition, not a surveyed line, and the page
+   says so. `district.ring(slug)` is what every step clips to (district cell, else
+   the OSM town relation); `district.since_ms(slug)` records the imagery cutoff
+   with the area so reruns cannot widen it. The row filter must test the town ring
+   AND nearest-centre: Lower Falls sits on the Wellesley line and nearest-centre
+   alone annexed 405 poles from the next town.
+
 8. `osm.py` Overpass query for `power=pole` and `man_made=utility_pole` nodes in
    the bbox, cached forever under `data/osm/<slug>/`; nearest node per utility
    record at 8/15/25 m, 15 m is the headline. report.py adds `meta.osm`, a

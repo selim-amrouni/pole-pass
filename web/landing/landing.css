@@ -48,14 +48,20 @@ h2 { font-size: 20px; font-weight: 600; margin: 32px 0 12px; }
 /* auto-fit rather than a fixed count: the row was hardcoded to 3 and the fourth territory
    dropped onto its own line. At the 992px content width this fits 4 across, and it keeps
    working when a fifth is added instead of needing another edit. */
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+/* Fixed 3 columns, not auto-fit. auto-fit packs as many cards as fit, which put four across and
+   orphaned the fifth on a row of its own. Three columns gives 5 areas a 3+2 layout that still reads
+   as a grid, and leaves room for a sixth without touching this file. */
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .card { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .card .pic { position: relative; aspect-ratio: 4 / 5; background: #2a2a28; }
 .card .pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; } .card .pic .ph { position: absolute; inset: 0; display: grid; place-items: center; color: #bbb; font-size: 13px; } .card .pic.nophoto .ph { display: grid !important; }
 .card .body { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
 .card .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.card .name { font-family: var(--serif); font-size: clamp(17px, 1.9vw, 21px); font-weight: 500; line-height: 1.2; }
-.kind { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-3); white-space: nowrap; }
+/* min-width: 0 lets the name wrap instead of holding the row at its content width. Without it a long
+   name ("Newton Lower Falls, Massachusetts") pushed the kind badge past the card edge, where
+   .card's overflow: hidden clipped it to "SUBURBA". */
+.card .name { font-family: var(--serif); font-size: clamp(17px, 1.9vw, 21px); font-weight: 500; line-height: 1.2; min-width: 0; }
+.kind { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-3); white-space: nowrap; flex: 0 0 auto; }
 .kind.city { background: var(--accent-bg); border-color: #c5d9e8; color: var(--accent); }
 .kind.backcountry { background: #e9f1e4; border-color: #c3d8b8; color: var(--ok); }
 .kind.suburb { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
