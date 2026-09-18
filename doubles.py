@@ -445,8 +445,13 @@ def process_pair(pair, slug, token, frames_n, crops_dir, since_ms=None):
 def build_double_request(item):
     data = base64.standard_b64encode(item["crop_path"].read_bytes()).decode()
     when = time.strftime("%Y-%m", time.gmtime(item["captured_at"] / 1000)) if item.get("captured_at") else "unknown"
-    context = (f"Crop from a photo taken {when}. The two flagged map features are about "
-               f"{item['distance_m']:.1f} m apart on the ground. Return the JSON record.")
+    # Deliberately NOT told how far apart the two map features are. That number is triangulated and
+    # unreliable along the camera ray, and measured on both runs the model simply handed it back as
+    # its own separation_estimate_m -- 85% within 0.5 m on the rows that get published, against 28%
+    # elsewhere. Withholding it makes the model's estimate an independent second opinion rather than
+    # an echo, and stops a bad number from steering the double call itself. The separation the page
+    # shows is measured from the detection outlines by frame_separation(), not asked for here.
+    context = f"Crop from a photo taken {when}. Return the JSON record."
     return {
         "model": classify.MODEL,
         "max_tokens": 500,
