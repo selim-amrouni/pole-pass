@@ -65,7 +65,7 @@
     const G = { axis: '<line x1="7" y1="1" x2="7" y2="13"/>', att: '<circle cx="7" cy="7" r="5.5"/>', xfmr: '<rect x="2" y="2" width="10" height="10"/>' };
     const key = keys.length ? `<div class="key"><span class="kt">Model observations</span>${keys.map(([k, l]) => `<span><svg viewBox="0 0 14 14" class="g ${k}" aria-hidden="true">${G[k]}</svg>${esc(l)}</span>`).join('')}</div>` : '';
     frame.innerHTML = `<img src="${esc(src)}" alt="Street photo of pole ${esc(ex.id)} in ${esc(t.name)}, taken ${esc(ex.date || 'date unknown')}, with the model's marked observations" onerror="this.parentNode.innerHTML='<div class=ph>Example photo unavailable.</div>'">${svg ? `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${svg}</svg>` : ''}${key}`;
-    const flagNote = ex.flags && ex.flags.length ? 'Model flags on this record have not been verified.' : 'No model flag on this record.';
+    const flagNote = ex.flags && ex.flags.length ? 'Model flags on this record have not been verified.' : 'No flagged condition on this record.';
     cap.innerHTML = `${esc(t.name)} · photo ${esc(ex.date || 'date unknown')}${ex.by ? ` by ${esc(ex.by)}` : ''} · <a href="${encodeURIComponent(t.slug)}/#pole=${encodeURIComponent(ex.id)}">Open this record</a><br><span class="small">Markers are model observations, not measurements. ${flagNote} Photo © Mapillary contributors, CC BY-SA 4.0${ex.url ? ` · <a href="${esc(ex.url)}" target="_blank" rel="noopener">source</a>` : ''}.</span>`;
     return t.slug;
   }

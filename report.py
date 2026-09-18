@@ -475,7 +475,7 @@ def main():
         shutil.copy(WEB / f, out_dir / f)
 
     notice, vsection, vshort = validation_blocks(precision)
-    contact_nav = f'<a class="btn primary big" href="{args.contact}">Contact Selim</a>' if args.contact else ""
+    contact_nav = f'<a class="btn sm bd" href="{args.contact}">Contact / feedback</a>' if args.contact else ""
     contact_section = ("<h3>Try another area</h3><p>Have an area in mind? Send me the town or service territory. I'll check the available imagery.</p>"
                        f"<p><a class=\"btn primary\" href=\"{args.contact}\">Ask about another area</a></p>") if args.contact else ""
     html = render((WEB / "index.html").read_text(), {

@@ -246,3 +246,29 @@ test('mergeReviews classifies each decision as new, same, conflict, or unknown; 
   const { items: items3 } = PP.mergeReviews({}, incoming, byId);
   assert.equal(items3.find(i => i.id === 'a').kind, 'new');
 });
+
+test('orderFlags leads with the active filter, then falls back to the severity order', () => {
+  const dbl = { pair_id: 'MH-abc12345', reason: 'old pole beside its replacement' };
+  const many = rec({ dbl, lean: 'moderate', xarm: 'damaged', veg: 'touching', att: 4, xfmr: true });
+  // No filter: the documented severity order, conditions before watch items before equipment.
+  assert.deepEqual(PP.orderFlags(many, null), ['crossarm', 'double', 'lean', 'vegetation', 'att3', 'xfmr']);
+  assert.deepEqual(PP.orderFlags(many, 'all'), ['crossarm', 'double', 'lean', 'vegetation', 'att3', 'xfmr']);
+  // The filter the reader arrived through always leads, whatever its severity rank.
+  assert.equal(PP.primaryFlag(many, 'veg'), 'vegetation');
+  assert.equal(PP.primaryFlag(many, 'double'), 'double');
+  assert.equal(PP.primaryFlag(many, 'xfmr'), 'xfmr');
+  assert.equal(PP.primaryFlag(many, 'att3'), 'att3');
+  // Chip keys and flag keys differ (xarm/crossarm, veg/vegetation); FILTER_FLAG is the one map.
+  assert.equal(PP.FILTER_FLAG.xarm, 'crossarm');
+  assert.equal(PP.FILTER_FLAG.veg, 'vegetation');
+  // The rest keep their relative order behind the lead.
+  assert.deepEqual(PP.orderFlags(many, 'veg'), ['vegetation', 'crossarm', 'double', 'lean', 'att3', 'xfmr']);
+  // A filter the record does not carry changes nothing.
+  assert.deepEqual(PP.orderFlags(rec({ veg: 'touching' }), 'xarm'), ['vegetation']);
+  // Watch items never lead ahead of a condition flag.
+  assert.equal(PP.primaryFlag(rec({ lean: 'slight', veg: 'touching' }), null), 'vegetation');
+  assert.equal(PP.primaryFlag(rec({ lean: 'slight' }), null), 'lean_slight');
+  // Nothing flagged, and non-utility records, have no primary finding.
+  assert.equal(PP.primaryFlag(rec({}), null), null);
+  assert.equal(PP.primaryFlag(rec({ util: false, veg: 'touching' }), 'veg'), null);
+});

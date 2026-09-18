@@ -74,6 +74,27 @@
     return { n: frames.length, supporting, drives: new Set(supporting.map(f => f.seq).filter(Boolean)).size, latest, latestStatus };
   }
 
+  // ---- which finding leads a record. The panel must open on the reason the reader arrived, so an
+  // active filter always wins; with no filter, fall back to a fixed order. CONDITION_PRIORITY is an
+  // EDITORIAL severity judgement (structural damage before a pair before a lean before vegetation),
+  // not a measured quantity and not derived from any file in data/. Watch items and equipment
+  // observations never lead ahead of a condition flag.
+  const CONDITION_PRIORITY = ['crossarm', 'double', 'lean', 'vegetation'];
+  const WATCH_PRIORITY = ['lean_slight'];
+  const EQUIPMENT_PRIORITY = ['att3', 'xfmr'];
+  const FLAG_PRIORITY = [...CONDITION_PRIORITY, ...WATCH_PRIORITY, ...EQUIPMENT_PRIORITY];
+  // Filter chips are keyed by field name (xarm, veg); flags are keyed by finding name (crossarm,
+  // vegetation). One map so the URL, the chips, and the flag order agree on what "the active issue" is.
+  const FILTER_FLAG = { double: 'double', lean: 'lean', xarm: 'crossarm', veg: 'vegetation', lean_slight: 'lean_slight', att3: 'att3', xfmr: 'xfmr' };
+  // The record's flags, most relevant first. activeFilter is a FILTERS key ('xarm') or null.
+  function orderFlags(r, activeFilter) {
+    const flags = reviewableFlags(r);
+    const lead = FILTER_FLAG[activeFilter];
+    const rank = k => FLAG_PRIORITY.indexOf(k);
+    return flags.slice().sort((a, b) => (b === lead) - (a === lead) || rank(a) - rank(b));
+  }
+  const primaryFlag = (r, activeFilter) => orderFlags(r, activeFilter)[0] || null;
+
   // ---- review decisions (browser-local). rv = { flags: {key: 'supported'|'not_supported'|'cannot_tell'|null}, note, updated? }
   const REVIEW_VALUES = ['supported', 'not_supported', 'cannot_tell'];
   const decided = (rv, k) => !!(rv && rv.flags && REVIEW_VALUES.includes(rv.flags[k]));
@@ -187,5 +208,6 @@
   return { isUtility, possibleLean, crossarmDamage, vegetationContact, transformerVisible, attachments3, isDoublePole,
            conditionFlags, hasConditionIssue, leanWarning, warningFlags, hasWarning, conditionUnclear, frameYears, spansYears, notInOsm, OSM_HEADLINE_M,
            RECENT_MONTHS, monthsSince, isRecent, ageLabel, reviewableFlags, flagSupport, REVIEW_VALUES, reviewState, reviewVerdict, reviewProgress, mergeReviews,
+           CONDITION_PRIORITY, FLAG_PRIORITY, FILTER_FLAG, orderFlags, primaryFlag,
            FILTERS, applyFilters, summary, SORTS };
 });

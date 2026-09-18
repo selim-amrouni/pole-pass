@@ -216,3 +216,34 @@ IS independent, which is why the distance fix held on both towns and the schema
 fix did not. Also: two eyeballed crops per town is not evidence -- the thing that
 would actually settle this is the graded precision sample in validate.py, still
 not run, and no amount of prompt iteration substitutes for it.
+
+## A ternary chain with a bare fallback is a silent mislabel (2026-09-18)
+`flagLabel` in `web/app.js` mapped a flag key to its display text as
+`k === 'lean' ? ... : k === 'crossarm' ? ... : k === 'att3' ? ... : xfmrLabel(r)`.
+When the `double` flag was added to the standard page, no branch was added for it, so
+every double-pole record fell through to the last arm and led with the words **"No
+transformer visible"**. It shipped, and it was reported months later as a design
+complaint ("the panel leads with the wrong finding") rather than as a bug, because the
+output was a plausible sentence about a real field.
+
+**Pattern:** a lookup written as a ternary chain ending in a value rather than in
+`undefined` cannot fail loudly. Adding a case to the data (a new flag key) does not
+force a matching case in the renderer. Write these as a map keyed by the same constant
+the data uses, or end the chain in an explicit default that is obviously a default
+(`L.flag[k] || k`), so a missing case shows as the key rather than as another field's
+answer. The general test: for each enum the code branches on, is there a place where
+adding a member is silently absorbed?
+
+## Pixel breakpoints fitted to one area clip the next one (2026-09-18)
+The toolbar folded filter groups into "More filters" below hardcoded 1560 px and 1300 px.
+Those numbers were fitted to one territory's chip widths; chip labels carry per-area
+counts ("Vegetation 169" vs "Vegetation 12"), so the natural width differs per area and
+the constants were wrong everywhere else. At 1363 px the Export control was cut off with
+no scrollbar and no error.
+
+**Pattern:** a layout threshold expressed in viewport pixels is a guess about content
+width. Measure the content instead — fold one group at a time until the row actually
+fits. Two extra details made it work: the containers wrap rather than overflow, so the
+test is a height/position comparison and not `scrollWidth > clientWidth`; and the first
+measurement runs before the web font swaps in, which reports the wrong width, so it has
+to be repeated on `document.fonts.ready`.

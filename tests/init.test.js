@@ -8,14 +8,16 @@ const { makeDocument, El } = require('./fakedom.js');
 
 const OUT = path.join(__dirname, '..', 'out', 'greenpoint-brooklyn-new-york');
 const IDS = ['summary', 'dates-label|span', 'territory|select', 'loc-name|span', 'kind|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|input', 'other|input', 'years|input', 'years-n|span', 'osm-wrap|label', 'osm|input', 'osm-n|span', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'imp-review|button', 'imp-file|input', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'map-state', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img',
-  'map-notice', 'chips-eq', 'chips-more', 'g-issues', 'g-equip', 'g-review', 'review-seg|span', 'review-n|span', 'recent-n|span', 'more-btn|button', 'more-menu', 'more-fold', 'active', 'import-dlg|dialog', 'import-body', 'import-close|button', 'about-dlg|dialog', 'about-close|button'];
+  'map-notice', 'chips-eq', 'chips-more', 'g-issues', 'g-equip', 'g-review', 'review-seg|span', 'review-n|span', 'recent-n|span', 'more-btn|button', 'more-menu', 'more-fold', 'active', 'import-dlg|dialog', 'import-body', 'import-close|button', 'about-dlg|dialog', 'about-close|button',
+  'notice-btn|button', 'filters', 'more-n|span', 'more-done|button', 'list-rail|button', 'about-counts'];
 
 function boot(hash = '', width = 1440, extra = {}) {
   const document = makeDocument(IDS.map(s => s.split('|')));
   const storage = Object.assign({}, extra.storage);
   const localStorage = { getItem: k => storage[k] ?? null, setItem: (k, v) => { storage[k] = String(v); } };
   const window = { innerWidth: width, addEventListener() {}, PP: require('../web/predicates.js'), location: { hash, pathname: '/', search: '' } };
-  const history = { replaceState: (s, t, url) => { window.location.hash = url.startsWith('#') ? url : ''; } };
+  const setUrl = url => { const i = url.indexOf('#'); window.location.hash = i >= 0 ? url.slice(i) : ''; };
+  const history = { replaceState: (s, t, url) => setUrl(url), pushState: (s, t, url) => setUrl(url) };
   const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
   window.POLE_DATA = win.POLE_DATA;
   const app = fs.readFileSync(path.join(OUT, 'app.js'), 'utf8');
@@ -28,7 +30,7 @@ function boot(hash = '', width = 1440, extra = {}) {
 
 test('initializes without maplibregl: fallback shown, list and count rendered, nothing selected', () => {
   const { document, PP, window } = boot();
-  assert.match(document.getElementById('map-state').innerHTML, /map library/);
+  assert.match(document.getElementById('map-state').innerHTML, /Map unavailable/);
   assert.equal(document.getElementById('map-state').hidden, false);
   assert.equal(document.getElementById('ws').classList.contains('map-failed'), true, 'the list reclaims the space');
   assert.equal(document.getElementById('legend').hidden, true);
@@ -117,12 +119,12 @@ test('photo key lists only the glyphs drawn on the current frame and follows the
   const r = window.POLE_DATA.records.find(x => x.util && x.frames.some(f => f.img && f.marks && f.marks.top && f.marks.base && f.marks.att.length));
   PP.select(r.id);
   const detail = document.getElementById('detail');
-  assert.match(detail.innerHTML, /class="key"[^]*Mapillary outline[^]*Pole axis[^]*Attachment 1/);
+  assert.match(detail.innerHTML, /class="keyrow"[^]*Mapillary outline[^]*Pole axis[^]*Attachment 1/);
   detail.querySelectorAll('button').find(b => b.id === 'tg-markers').click();
   assert.doesNotMatch(detail.innerHTML, /Pole axis/);
   assert.match(detail.innerHTML, /Mapillary outline/);
   detail.querySelectorAll('button').find(b => b.id === 'tg-outline').click();
-  assert.doesNotMatch(detail.innerHTML, /class="key"/);
+  assert.doesNotMatch(detail.innerHTML, /class="keyrow"/);
 });
 
 test('territory selector appears only when a territories.json lists this bundle', async () => {
@@ -147,7 +149,7 @@ test('review filter narrows to reviewable, unreviewed records; reviewed is empty
   const expected = window.POLE_DATA.records.filter(r => window.PP.isUtility(r) && window.PP.reviewableFlags(r).length > 0);
   assert.equal(PP.filtered.length, expected.length);
   assert.ok(PP.filtered.every(r => window.PP.reviewableFlags(r).length > 0));
-  assert.equal(document.getElementById('review-n').textContent, `0 of ${expected.length} reviewed`);
+  assert.equal(document.getElementById('review-n').textContent, `0 / ${expected.length} with something to review`);
 
   PP.state.review = 'reviewed';
   PP.refresh();
@@ -166,7 +168,7 @@ test('nextUnreviewed moves to a later record whose flags are not all decided', (
   flags.forEach(k => { detail.querySelectorAll('button').find(b => b.dataset.rf === k && b.dataset.rv === 'supported').click(); });
   assert.equal(window.PP.reviewState(first, PP.review[first.id]), 'reviewed');
   const totalReviewable = window.POLE_DATA.records.filter(r => r.util && window.PP.reviewableFlags(r).length > 0).length;
-  assert.equal(document.getElementById('review-n').textContent, `1 of ${totalReviewable} reviewed`);
+  assert.equal(document.getElementById('review-n').textContent, `1 / ${totalReviewable} with something to review`);
   PP.nextUnreviewed();
   assert.notEqual(PP.state.selected, first.id);
   const next = window.POLE_DATA.records.find(r => r.id === PP.state.selected);
@@ -229,4 +231,91 @@ test('the about link opens the about dialog; the close button closes it', () => 
   assert.equal(document.getElementById('about-dlg').open, true);
   document.getElementById('about-close').click();
   assert.equal(document.getElementById('about-dlg').open, false);
+});
+
+test('a deep link with an issue context opens the record inside that filtered set', () => {
+  const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
+  const PPred = require('../web/predicates.js');
+  const target = win.POLE_DATA.records.find(r => r.util && r.veg === 'touching');
+  const inFilter = win.POLE_DATA.records.filter(r => r.util && r.veg === 'touching');
+  const { document, PP } = boot(`#pole=${target.id}&issue=veg`);
+  assert.equal(PP.state.selected, target.id);
+  assert.equal(PP.state.flag, 'veg', 'the issue context is applied before the first refresh');
+  assert.equal(PP.filtered.length, inFilter.length);
+  const pos = document.getElementById('pos').textContent;
+  assert.equal(pos, `${PP.filtered.findIndex(r => r.id === target.id) + 1} of ${inFilter.length}`,
+    'the position counts within the filtered set, not within all poles');
+  // The panel leads with the reason the reader arrived, not with whatever is first in the data.
+  assert.match(document.querySelector('.primary .ctx').textContent, /Shown for: Possible vegetation contact/);
+  assert.equal(PPred.primaryFlag(target, 'veg'), 'vegetation');
+  // An unknown issue key is ignored rather than emptying the list.
+  const bogus = boot(`#pole=${target.id}&issue=nonsense`);
+  assert.equal(bogus.PP.state.flag, 'all');
+});
+
+test('the URL and Copy link carry the issue context; a bare #pole= link still works', () => {
+  const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
+  const target = win.POLE_DATA.records.find(r => r.util && r.veg === 'touching');
+  const { window, PP } = boot();
+  PP.state.flag = 'veg'; PP.refresh();
+  PP.select(target.id);
+  assert.equal(window.location.hash, `#pole=${target.id}&issue=veg`);
+  PP.state.flag = 'all'; PP.refresh();
+  PP.select(target.id);
+  assert.equal(window.location.hash, `#pole=${target.id}`, 'no issue filter leaves the hash as it was before');
+});
+
+test('a double-pole record leads with the double, not with the transformer line', () => {
+  // Regression: flagLabel was a ternary chain with no 'double' branch, so it fell through to the
+  // transformer label and every double-pole record announced "No transformer visible".
+  const { document, PP, window } = boot();
+  const target = window.POLE_DATA.records.find(r => r.util && !r.dbl && !r.xfmr);
+  target.dbl = { pair_id: 'TEST-abc12345', reason: 'old pole beside its replacement' };
+  PP.refresh();
+  PP.select(target.id);
+  const lead = document.querySelector('.lead').children[0].textContent;
+  assert.equal(lead, 'Possible double pole');
+  assert.doesNotMatch(lead, /transformer/i);
+  assert.match(document.getElementById('detail').innerHTML, /Possible double pole/);
+  delete target.dbl;
+});
+
+test('opening a record tucks the list into the rail on a narrow desktop, and the rail brings it back', () => {
+  const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
+  const target = win.POLE_DATA.records.find(r => r.util);
+
+  // Wide: list and record sit side by side, so there is nothing to reopen.
+  const wide = boot('', 1440);
+  wide.PP.select(target.id);
+  assert.equal(wide.document.getElementById('ws').classList.contains('list-open'), true);
+  assert.equal(wide.document.getElementById('ws').classList.contains('list-collapsed'), false);
+  assert.equal(wide.document.getElementById('list-rail').hidden, true);
+
+  // Narrow: the list would take a third of the screen from the evidence, so it collapses.
+  const narrow = boot('', 1200);
+  narrow.PP.select(target.id);
+  const ws = narrow.document.getElementById('ws');
+  assert.equal(ws.classList.contains('list-collapsed'), true);
+  assert.equal(narrow.document.getElementById('list-rail').hidden, false, 'the rail is the way back');
+  narrow.document.getElementById('list-rail').click();
+  assert.equal(ws.classList.contains('list-collapsed'), false);
+  assert.equal(narrow.document.getElementById('list-rail').hidden, true);
+  // Closing the record always returns to a browse view with the list showing.
+  narrow.PP.close();
+  assert.equal(ws.classList.contains('has-detail'), false);
+  assert.equal(ws.classList.contains('list-open'), true);
+});
+
+test('history entries that change only the issue repaint the open record', () => {
+  const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
+  const target = win.POLE_DATA.records.find(r => r.util && r.veg === 'touching');
+  const { document, PP, window } = boot(`#pole=${target.id}&issue=veg`);
+  assert.match(document.querySelector('.primary .ctx').textContent, /Shown for: Possible vegetation contact/);
+  // Back to the same record without the issue: the lead is derived from state.flag, so the panel
+  // has to re-render even though the selected record did not change.
+  window.location.hash = `#pole=${target.id}`;
+  PP.syncFromHash();
+  assert.equal(PP.state.flag, 'all');
+  assert.doesNotMatch(document.querySelector('.primary .ctx').textContent, /Shown for/);
+  assert.equal(document.querySelector('.primary .ctx').textContent, 'Primary finding');
 });
