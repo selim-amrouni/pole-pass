@@ -38,9 +38,14 @@ to its source photo.
 4. `dedupe.py` cluster detections within a few meters across consecutive
    frames, majority vote per field, keep disagreement rate as a column.
 5. `validate.py` sample 50 poles, write a CSV for hand grading, compute
-   precision per flag type. Do not skip. The precision table is the only part
-   of the writeup anyone will trust. `grade.py` serves the sample CSV as a
-   local page and writes grades back in place (blind by default).
+   precision per flag type. `grade.py` serves the sample CSV as a local page and
+   writes grades back in place (blind by default). OPTIONAL as of 2026-09-18 and
+   deliberately not run on any area: grading is hand work and the owner has
+   deprioritised it. Both scripts stay in the repo for whenever a real precision
+   number is wanted. Until one exists, no page may imply the calls were checked:
+   every area carries "Experimental results. The model's assessments have not been
+   independently verified", and that notice is what makes shipping ungraded
+   honest. Removing it would be a claim the evidence does not support.
 6. `tilt.py` apparent tilt per photo from the detection outline (medial axis,
    signed degrees from vertical); `--calibrate` writes
    `data/tilt/<slug>/calibration.json` from the model's own lean calls. It is
