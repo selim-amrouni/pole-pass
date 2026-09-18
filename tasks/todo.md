@@ -167,3 +167,36 @@ maintainers' backlogs compare - cannot be made on current evidence at all.
 
 Cross-check that the road denominator is sane: 177 km of centreline against ~4,000
 poles is ~44 m per pole, which is normal distribution spacing. The number is right.
+
+## Newton Lower Falls — shipped 2026-09-18 (PRs #30, #32, both merged to main)
+
+Fifth area live: https://selim-amrouni.github.io/pole-pass/newton-lower-falls-massachusetts/
+533 records, 509 utility poles, 13 double-pole candidates on 9 records. $2.55 of model calls.
+A DISTRICT, not a town — `district.py` Voronoi cell of OSM village nodes clipped to the Newton
+town ring, 3-year imagery cutoff recorded in `data/district/<slug>/district.geojson`.
+
+Rebuild from cache:
+    uv run python3 district.py --town "Newton, Massachusetts" --village "Newton Lower Falls" --since-years 3
+    uv run python3 roadcover.py --town "Newton Lower Falls, Massachusetts"
+    uv run python3 fetch.py --town "Newton Lower Falls, Massachusetts" --in-town --frames 2
+    uv run python3 classify.py / locate.py / doubles.py / dedupe.py / tilt.py --calibrate / osm.py / report.py
+    ./deploy.sh greenpoint-brooklyn-new-york hardwick-vermont reading-massachusetts \
+                marblehead-massachusetts newton-lower-falls-massachusetts
+(doubles.py must run BEFORE dedupe.py — dedupe reads candidates.jsonl for the `double` flag.)
+
+### Open, in priority order
+- [ ] **Re-run Marblehead doubles.** Its 27 candidates predate both fixes: they were produced with
+      the prompt anchor and pre-v3 schema, and include at least two streetlight false positives
+      found by eye (MH-7b5bbf86, MH-fdad8b7b) plus one different-depths call (MH-786f670a). ~$0.30.
+      `data/doubles/marblehead-massachusetts/results/` must be moved aside to force it.
+- [ ] **No graded precision sample for either double-pole area.** CLAUDE.md calls this the only part
+      of a writeup anyone will trust. `validate.py` + `grade.py` exist and have not been run on the
+      `double` flag at all. This is issue #1 territory.
+- [ ] Marblehead's `out/` still carries leftovers from the superseded `report_doubles.py`
+      (candidates.csv, candidates.geojson, doubles.css, doubles.js). Harmless but confusing.
+- [ ] `report_doubles.py` + `web/doubles.*` are dead code — the bespoke page was replaced by the
+      `double` flag on the standard page. They write to the SAME `out/<slug>/` path and would
+      silently overwrite a standard bundle if anyone ran them. Worth deleting.
+- [ ] `district.py` refuses multi-village districts (needs a polygon union, not implemented).
+      Waban + Newton Upper Falls were measured and are viable if more Newton coverage is wanted:
+      ~$28 for two villages, ~$41 for three.
