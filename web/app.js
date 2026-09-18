@@ -24,10 +24,20 @@
   const xfmrLabel = r => r.xfmr === true ? 'Transformer visible' : 'No transformer visible';
   const dateLabel = d => d && d.date ? d.date : 'Date unknown';
   const flagCls = k => k === 'att3' ? 'att' : k === 'xfmr' ? 'neutral' : k === 'lean_slight' ? 'warn' : 'issue';
+  // Label for one flag on one record. Every key needs a branch: this used to end in a bare
+  // xfmrLabel(r) fallback, so 'double' fell through it and every double-pole record led with the
+  // words "No transformer visible".
+  const flagLabel = (r, k) => k === 'double' ? L.flag.double
+    : k === 'lean' || k === 'lean_slight' ? (L.lean[r.lean] || r.lean)
+    : k === 'crossarm' ? (L.xarm[r.xarm] || r.xarm)
+    : k === 'vegetation' ? (L.veg[r.veg] || r.veg)
+    : k === 'att3' ? attLabel(r)
+    : k === 'xfmr' ? xfmrLabel(r)
+    : (L.flag[k] || k);
 
   // ---------- state ----------
   const state = { flag: 'all', yearMin: null, yearMax: null, recent: false, review: 'all', other: false, years: false, osm: false, sort: 'date_desc', page: 1,
-    selected: null, viewing: null, compare: false, colorMode: 'condition', tab: 'list', example: false, outline: true, markers: true, badges: true, now: Date.now(), reviews: null };
+    selected: null, viewing: null, compare: false, colorMode: 'condition', tab: 'list', example: false, outline: true, markers: true, badges: true, now: Date.now(), reviews: null, listOpen: true };
   const PAGE = 20;
   const byId = Object.fromEntries(D.records.map(r => [r.id, r]));
   const yearsAll = D.records.filter(PP.isUtility).map(r => r.shown.year).filter(y => y != null);
@@ -45,12 +55,26 @@
   const reviewGlyph = r => { const s = PP.reviewState(r, review[r.id]); return s === 'reviewed' ? '✓' : s === 'partial' ? '◐' : s ? '○' : ''; };
 
   // ---------- header summary ----------
+  // Each headline number counts a different population and they overlap, so the tooltip and the
+  // About dialog name each one exactly: 231 is poles carrying a CONDITION flag and excludes the
+  // watch tier, while the review denominator is the wider set of poles carrying any flag at all.
+  function countsProse(s, reviewable) {
+    return [
+      ['poles', `${s.utility}`, `Utility-pole records. A further ${s.other} detected objects are street lights, traffic signals and similar; they sit under "Show other detected objects".`],
+      ['with at least one flag', `${s.conditionIssues}`, `Poles with a possible condition: double pole, lean (moderate or severe), crossarm damage, or vegetation contact. A pole with two of these is counted once. This figure excludes the ${s.warnings} poles whose only finding is a slight lean, which are listed as watch items under More filters.`],
+      ['watch items', `${s.warnings}`, 'Poles whose only lean call is "slight". One tier below a condition issue.'],
+      ['poles with something to review', `${reviewable}`, 'Poles carrying any flag at all: a condition flag, a watch item, 3+ attachments, or a visible transformer. These are the records with something to decide, which is why review progress counts against this number rather than against every pole.'],
+    ];
+  }
   function renderSummary() {
     const s = PP.summary(D.records, state.now);
-    const dates = s.yearMin == null ? 'photo dates unknown' : s.yearMin === s.yearMax ? `photos ${s.yearMin}` : `photos ${s.yearMin} to ${s.yearMax}`;
-    $('summary').innerHTML = `<b class="mono">${s.utility}</b> poles · <b class="mono">${s.conditionIssues}</b> possible condition issues · ${esc(dates)}`;
-    $('summary').title = `${s.utility} pole records from the model, ${s.other} other detected objects. ${s.conditionIssues} with a possible double pole, lean, crossarm damage, or vegetation contact. ${s.warnings} with a slight lean (watch items, listed under More filters).`;
+    const reviewable = PP.reviewProgress(D.records.filter(PP.isUtility), review).reviewable;
+    const dates = s.yearMin == null ? 'photo dates unknown' : s.yearMin === s.yearMax ? `imagery from ${s.yearMin}` : `imagery from ${s.yearMin}–${s.yearMax}`;
+    $('summary').innerHTML = `<b>${s.utility}</b> poles · <b>${s.conditionIssues}</b> poles with at least one flag · ${esc(dates)}`;
+    $('summary').title = countsProse(s, reviewable).map(([label, n, why]) => `${n} ${label} — ${why}`).join('\n\n');
     $('dates-label').textContent = s.yearMin == null ? '?' : `${s.yearMin}–${s.yearMax}`;
+    const ac = $('about-counts');
+    if (ac) ac.innerHTML = `<dl class="counts">${countsProse(s, reviewable).map(([label, n, why]) => `<dt>${esc(n)} ${esc(label)}</dt><dd>${esc(why)}</dd>`).join('')}</dl>`;
   }
 
   // ---------- filters ----------
@@ -65,8 +89,19 @@
     $('recent-n').textContent = String(base.filter(r => PP.isRecent(r, state.now)).length);
     if (D.meta.osm) $('osm-n').textContent = String(base.filter(PP.notInOsm).length);
     const p = PP.reviewProgress(base, review);
-    $('review-n').textContent = p.reviewable ? `${p.reviewed} of ${p.reviewable} reviewed` : '';
+    $('review-n').textContent = p.reviewable ? `${p.reviewed} / ${p.reviewable} with something to review` : '';
     document.querySelectorAll('#review-seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.rs === state.review)));
+    moreBadge();
+  }
+  // A badge on the closed popover, so a filter that is folded out of sight is still visible as a
+  // count. It depends on which groups are currently folded, so foldToolbar() calls it too.
+  function moreBadge() {
+    const fold = $('more-fold'), rv = $('g-review'), eq = $('g-equip'), badge = $('more-n');
+    if (!badge) return;
+    const n = [state.years, state.osm, state.other, state.flag === 'lean_slight',
+      rv && rv.parentNode === fold && state.review !== 'all',
+      eq && eq.parentNode === fold && (state.flag === 'att3' || state.flag === 'xfmr')].filter(Boolean).length;
+    badge.textContent = String(n); badge.hidden = !n;
   }
   function readYearInputs() {
     const a = parseInt($('year-min').value, 10), b = parseInt($('year-max').value, 10);
@@ -99,23 +134,29 @@
     if (mapApi) mapApi.setData(filtered);
     updateDetailNav();
   }
+  // Row findings: the flag that matters for the current context first, then at most one more, then a
+  // count. Every chip equally loud made the list unscannable and hid which one the filter selected.
+  const ROW_CHIPS = 2;
   function flagChips(r) {
-    const out = PP.conditionFlags(r).map(f => `<span class="flag issue">${L.flag[f]}</span>`);
-    PP.warningFlags(r).forEach(f => out.push(`<span class="flag warn">${L.flag[f]}</span>`));
-    if (PP.attachments3(r)) out.push(`<span class="flag att">3+ attachments</span>`);
-    if (PP.transformerVisible(r)) out.push(`<span class="flag neutral">Transformer</span>`);
-    if (!out.length) out.push(PP.conditionUnclear(r) ? `<span class="flag dim">Cannot tell from photos</span>` : `<span class="flag dim">No model flag</span>`);
-    return out.join('');
+    const ordered = PP.orderFlags(r, state.flag);
+    if (!ordered.length) return `<span class="flag dim">${PP.conditionUnclear(r) ? 'Cannot tell from photos' : 'No flagged condition'}</span>`;
+    const shown = ordered.slice(0, ROW_CHIPS).map(k => `<span class="flag ${flagCls(k)}">${esc(L.flag[k])}</span>`);
+    const rest = ordered.length - shown.length;
+    if (rest) shown.push(`<span class="plus" title="${esc(ordered.slice(ROW_CHIPS).map(k => L.flag[k]).join(', '))}">+${rest}</span>`);
+    return shown.join('');
   }
   function rowHtml(r) {
     const util = PP.isUtility(r);
-    const img = r.shown.img ? `<img src="${esc(r.shown.img)}" alt="" loading="lazy">` : `<span class="ph">No photo</span>`;
+    const alt = util ? `Street photo of pole ${r.id}` : `Street photo of detected object ${r.id}`;
+    const img = r.shown.img ? `<img src="${esc(r.shown.img)}" alt="${esc(alt)}" loading="lazy">` : `<span class="ph">No photo</span>`;
     const l1 = util ? flagChips(r) : `<span class="flag dim">${esc(L.type[r.type] || 'Other object')}</span>`;
     const st = util ? PP.reviewState(r, review[r.id]) : null;
     const right = util ? (st && st !== 'unreviewed' ? `<span class="status ${st}"><span aria-hidden="true">${reviewGlyph(r)}</span> ${esc(reviewStatusText(r))}</span>` : '') : `<span class="status">Not a utility pole</span>`;
-    return `<button class="row" role="option" data-id="${esc(r.id)}" aria-selected="${state.selected === r.id}">${img}
-      <span><span class="l1"><span>${l1}</span></span>
-      <span class="l2"><span class="d">${esc(dateLabel(r.shown))}<span class="age"> · ${esc(PP.ageLabel(r.shown.ts, state.now))}</span></span>${right}<span class="pid">${esc(r.id)}</span></span></span></button>`;
+    // Absolute date only. The relative age is the same on almost every row in an area and said
+    // nothing; it stays available on hover and in the record.
+    return `<button class="row" role="option" data-id="${esc(r.id)}" aria-selected="${state.selected === r.id}" title="${esc(dateLabel(r.shown))} · ${esc(PP.ageLabel(r.shown.ts, state.now))}">${img}
+      <span class="l1">${l1}</span>
+      <span class="meta"><span class="d">${esc(dateLabel(r.shown))}</span>${right}<span class="pid">${esc(r.id)}</span></span></button>`;
   }
   function renderList() {
     const total = filtered.length, shown = Math.min(total, state.page * PAGE);
@@ -128,23 +169,85 @@
     $('list').innerHTML = filtered.slice(0, shown).map(rowHtml).join('') + (shown < total ? `<div class="more"><button class="btn sm" id="more">Show more (${total - shown} left)</button></div>` : '');
   }
 
+  // ---------- routing ----------
+  // The URL carries the record AND the issue context it was found under, so a copied link reopens
+  // the same result set. "#pole=<id>" alone stays valid; issue keys are the FILTERS keys.
+  function hashFor(id, flag) {
+    const parts = [];
+    if (id) parts.push(`pole=${encodeURIComponent(id)}`);
+    if (flag && flag !== 'all') parts.push(`issue=${encodeURIComponent(flag)}`);
+    return parts.length ? '#' + parts.join('&') : '';
+  }
+  const shareUrl = () => location.origin + location.pathname + location.search + hashFor(state.selected, state.flag);
+  function writeHash(push) {
+    const url = location.pathname + location.search + hashFor(state.selected, state.flag);
+    if (push && typeof history.pushState === 'function') history.pushState(null, '', url);
+    else history.replaceState(null, '', url);
+  }
+  function parseHash() {
+    const h = location.hash || '';
+    const p = /[#&]pole=([^&]*)/.exec(h), i = /[#&]issue=([^&]*)/.exec(h);
+    const issue = i ? decodeURIComponent(i[1]) : null;
+    return { pole: p ? decodeURIComponent(p[1]) : null, issue: issue && PP.FILTERS[issue] ? issue : null };
+  }
+  // Back and forward move between application states rather than leaving the page.
+  function syncFromHash() {
+    const h = parseHash();
+    const flag = h.issue || 'all';
+    if (flag !== state.flag) { state.flag = flag; refresh(true); }
+    if (h.pole && h.pole !== state.selected) select(h.pole, { silent: true, focus: false });
+    else if (!h.pole && state.selected) close(false, true);
+    // The lead finding is derived from state.flag, so a history entry that changes only the issue
+    // still has to repaint the open record.
+    else if (h.pole && state.selected) renderDetail();
+  }
+
   // ---------- detail ----------
+  // The results list keeps its scroll position across collapse and across close: display:none drops
+  // scrollTop, so it is saved and put back by hand.
+  let listScroll = 0;
+  const saveListScroll = () => { const l = $('list'); if (l && Number.isFinite(l.scrollTop)) listScroll = l.scrollTop; };
+  // Reading scrollHeight forces the layout the list has just been given back; without it the
+  // element is still zero-height at this point and the assignment is dropped. The extra frame
+  // covers the case where images below the fold have not been laid out yet either.
+  const restoreListScroll = () => {
+    const l = $('list'); if (!l || !listScroll) return;
+    const apply = () => { if (l.scrollHeight > l.clientHeight) l.scrollTop = listScroll; };
+    apply();
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(apply);
+  };
+  function setListOpen(on) {
+    if (!on) saveListScroll();
+    state.listOpen = on;
+    const ws = $('ws');
+    ws.classList.toggle('list-collapsed', !on);
+    ws.classList.toggle('list-open', on);
+    const rail = $('list-rail'); if (rail) rail.hidden = on || !ws.classList.contains('has-detail');
+    if (on) restoreListScroll();
+    if (mapApi) mapApi.resize();
+  }
   function select(id, opts = {}) {
     const r = byId[id]; if (!r) return false;
+    const first = !state.selected;
     state.selected = id; state.viewing = r.frames.findIndex(f => f.shown); if (state.viewing < 0) state.viewing = r.frames.length - 1;
     state.compare = false; state.example = !!opts.example;
-    if (!opts.silent) history.replaceState(null, '', `#pole=${encodeURIComponent(id)}`);
+    if (!opts.silent) writeHash(opts.push !== false);
     document.querySelectorAll('.row').forEach(el => el.setAttribute('aria-selected', String(el.dataset.id === id)));
     renderDetail();
     $('ws').classList.add('has-detail');
+    // On a narrow desktop the list would take a third of the screen away from the evidence, so
+    // opening a record tucks it into the rail. Wide layouts keep it beside the photo.
+    if (first && typeof window.innerWidth === 'number' && window.innerWidth < 1260) setListOpen(false);
+    else setListOpen(state.listOpen !== false);
     if (mapApi) { mapApi.toMini(); mapApi.select(r, opts.fromMap); }
     if (opts.focus !== false) { const h = $('detail').querySelector('.detail-h button'); if (h) h.focus(); }
     return true;
   }
-  function close(keepSelection) {
-    if (!keepSelection) { state.selected = null; history.replaceState(null, '', location.pathname + location.search); document.querySelectorAll('.row').forEach(el => el.setAttribute('aria-selected', 'false')); }
+  function close(keepSelection, silent) {
+    if (!keepSelection) { state.selected = null; if (!silent) writeHash(true); document.querySelectorAll('.row').forEach(el => el.setAttribute('aria-selected', 'false')); }
     state.example = false;
     $('ws').classList.remove('has-detail'); $('detail').hidden = true; $('detail').innerHTML = '';
+    setListOpen(true);
     if (mapApi) { mapApi.toMain(); if (!keepSelection) mapApi.select(null); }
     const row = document.querySelector(keepSelection && state.selected ? `.row[data-id="${CSS.escape(state.selected)}"]` : '.row'); if (row) row.focus();
   }
@@ -222,16 +325,18 @@
   function mapsLinks(r) {
     const q = `${r.lat.toFixed(6)},${r.lon.toFixed(6)}`;
     const pin = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
-    const pano = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(q)}`;
     return `<span class="maps"><a class="lnk" href="${pin}" target="_blank" rel="noopener" title="Open this location in Google Maps">Google Maps ↗</a>` +
-           `<a class="lnk sv" href="${pano}" target="_blank" rel="noopener" title="Google Street View: a different provider on a different date, so it is an independent check on what is standing here now">Street View ↗</a></span>`;
+           `<a class="lnk" href="${panoUrl(r)}" target="_blank" rel="noopener" title="Google Street View: a different provider on a different date, so it is an independent check on what is standing here now">Street View ↗</a></span>`;
   }
+  const panoUrl = r => `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(r.lat.toFixed(6) + ',' + r.lon.toFixed(6))}`;
 
   function renderDetail() {
     const r = byId[state.selected]; if (!r) return;
     const f = r.frames[state.viewing] || null;
     const util = PP.isUtility(r);
-    const flags = PP.reviewableFlags(r);
+    // Ordered by the context the reader arrived through, so the panel leads with the reason the
+    // record was opened rather than with whatever happens to be first in the data.
+    const flags = PP.orderFlags(r, state.flag);
     const rv = review[r.id] || { flags: {}, note: '' };
     const frameFlags = f ? [(f.lean === 'moderate' || f.lean === 'severe') && L.flag.lean, f.xarm === 'damaged' && L.flag.crossarm, f.veg === 'touching' && L.flag.vegetation, f.lean === 'slight' && L.flag.lean_slight].filter(Boolean) : [];
     const m = f && f.marks;
@@ -261,10 +366,8 @@
     const badges = frameFlags.length && state.badges ? `<div class="badges" aria-hidden="true">${frameFlags.map(x => `<span class="flag ${x === L.flag.lean_slight ? 'warn' : 'issue'}">${esc(x)}</span>`).join('')}</div>` : '';
     const photo = f && f.img ? `<div class="imgwrap"><img id="dimg" src="${esc(f.img)}" alt="Photo of pole ${esc(r.id)} taken ${esc(dateLabel(f))}">${overlay}</div>${badges}`
       : `<div class="photo-missing">Photo unavailable.${f && f.url ? ` <a href="${esc(f.url)}" target="_blank" rel="noopener">Open source photo</a>` : ''}</div>`;
-    const ovbar = `<div class="ovbar" role="group" aria-label="Photo annotations">
-        <button class="o" id="tg-outline" aria-pressed="${state.outline}" ${f && ((f.poly && f.poly.length) || f.dblboxes) ? '' : 'disabled'}><i></i>Outline</button>
-        <button class="m" id="tg-markers" aria-pressed="${state.markers}" ${m ? '' : 'disabled'}><i></i>Markers</button>
-        <button class="b" id="tg-badges" aria-pressed="${state.badges}" ${frameFlags.length ? '' : 'disabled'}><i></i>Flags</button></div>`;
+    // One control instead of three buttons plus a permanent legend across the bottom of the photo.
+    // The heading keeps the distinction explicit: these marks are the model's, not the photograph's.
     const G = { dblbox: '<rect x="1" y="2" width="4.5" height="10"/><rect x="8.5" y="2" width="4.5" height="10"/>', outline: '<rect x="4.5" y="1" width="5" height="12" rx="1"/>', axis: '<line x1="7" y1="1" x2="7" y2="13"/>', att: '<circle cx="7" cy="7" r="5.5"/>', xfmr: '<rect x="2" y="2" width="10" height="10"/>', xarm: '<polygon points="7,1.5 12.5,12 1.5,12"/>', veg: '<polygon points="7,1 13,7 7,13 1,7"/>' };
     const keyItems = [
       f && f.poly && f.poly.length && state.outline && ['outline', 'Mapillary outline'],
@@ -275,51 +378,85 @@
       m && state.markers && m.xarm && ['xarm', 'Crossarm damage'],
       m && state.markers && m.veg && ['veg', 'Vegetation contact'],
     ].filter(Boolean);
-    const key = keyItems.length ? `<div class="key" aria-label="Photo annotation key"><span class="kt">Model observations</span>${keyItems.map(([k, label]) => `<span><svg viewBox="0 0 14 14" class="g ${k}" aria-hidden="true">${G[k]}</svg>${esc(label)}</span>`).join('')}</div>` : '';
+    const key = keyItems.length ? `<div class="h">Key</div><div class="keyrow">${keyItems.map(([k, label]) => `<span><svg viewBox="0 0 14 14" class="key-g ${k}" aria-hidden="true">${G[k]}</svg>${esc(label)}</span>`).join('')}</div>` : '';
+    const TOGGLES = [
+      ['tg-outline', 'outline', 'Outline', f && ((f.poly && f.poly.length) || f.dblboxes)],
+      ['tg-markers', 'markers', 'Markers', !!m],
+      ['tg-badges', 'badges', 'Flags', !!frameFlags.length],
+    ];
+    const nOn = TOGGLES.filter(([, k, , ok]) => ok && state[k]).length;
+    const ovbar = `<div class="ovbar menu">
+        <button class="btn sm" id="ann-btn" aria-haspopup="dialog" aria-expanded="false">Annotations${nOn ? `<span class="mono dot">${nOn}</span>` : ''}</button>
+        <div class="menu-list" id="ann-menu" role="dialog" aria-label="Photo annotations" hidden>
+          <div class="h">Model annotations</div>
+          ${TOGGLES.map(([id, k, label, ok]) => `<div class="tg"${ok ? '' : ' aria-disabled="true"'}><span>${label}</span><button class="btn sm bd" id="${id}" aria-pressed="${!!(ok && state[k])}" ${ok ? '' : 'disabled'}>${ok && state[k] ? 'On' : 'Off'}</button></div>`).join('')}
+          ${key}
+          <p class="hint">Drawn by the model over the source photograph, which is otherwise unaltered.</p>
+        </div></div>`;
     const yrs = PP.frameYears(r);
     const strip = r.frames.length > 1 ? `<div class="strip"><span class="lbl">${r.frames.length} photos<br>${yrs.length > 1 ? `${yrs[0]}–${yrs[yrs.length - 1]}` : `${r.seq} drive${r.seq === 1 ? '' : 's'}`}</span>
         <div class="thumbs">${r.frames.map((x, i) => `<button data-i="${i}" aria-pressed="${i === state.viewing}" aria-label="View photo from ${esc(dateLabel(x))}">${x.img ? `<img src="${esc(x.img)}" alt="">` : `<span class="ph"></span>`}<span class="c">${esc(x.date || '?')}</span></button>`).join('')}</div>
         <button class="btn sm cmp" id="cmp" aria-pressed="${state.compare}">Compare</button></div>${state.compare ? compareHtml(r) : ''}` : '';
     const latest = r.latest && r.latest.ts && (!f || r.latest.ts > (f.ts || 0)) ? `<a href="${esc(r.latest.url)}" target="_blank" rel="noopener">Latest available photo ${esc(dateLabel(r.latest))}${r.latest.classified ? '' : ' (not assessed)'} ↗</a>` : '';
-    const flagLabel = k => k === 'lean' || k === 'lean_slight' ? L.lean[r.lean] : k === 'crossarm' ? L.xarm[r.xarm] : k === 'vegetation' ? L.veg[r.veg] : k === 'att3' ? attLabel(r) : xfmrLabel(r);
-    const why = flags.length ? flags.map(k => `<div class="why-it"><span class="flag ${flagCls(k)}">${esc(flagLabel(k))}</span>${evidenceHtml(r, k)}${k === 'vegetation' ? '<div class="hint">Judged from overlap in the photo; a branch behind or in front of the pole can read as touching it.</div>' : ''}</div>`).join('')
-      : `<div class="why-it"><span class="flag dim">${PP.conditionUnclear(r) ? 'Condition could not be assessed from the photos' : util ? 'No model flag. Listed as part of the inventory; not inspected.' : 'Not a utility pole'}</span></div>`;
+    const why = flags.length ? flags.map(k => `<div class="why-it"><span class="flag ${flagCls(k)}">${esc(flagLabel(r, k))}</span>${evidenceHtml(r, k)}${k === 'vegetation' ? '<div class="hint">Judged from overlap in the photo; a branch behind or in front of the pole can read as touching it.</div>' : ''}</div>`).join('')
+      : `<div class="why-it"><span class="flag dim">${PP.conditionUnclear(r) ? 'Condition could not be assessed from the photos' : util ? 'No flagged condition. Listed as part of the inventory; not inspected.' : 'Not a utility pole'}</span></div>`;
+    // Lead block: what was found, why the model says so, and where and when. The flag the reader
+    // filtered on leads; with no filter, PP.orderFlags falls back to the documented severity order.
+    const lead = flags[0] || null;
+    const ctx = !lead ? (util ? 'Record' : 'Not a utility pole')
+      : PP.FILTER_FLAG[state.flag] === lead ? `Shown for: ${esc(L.flag[lead])}` : 'Primary finding';
+    const leadChip = lead ? `<span class="flag ${flagCls(lead)}">${esc(flagLabel(r, lead))}</span>`
+      : `<span class="flag dim">${PP.conditionUnclear(r) ? 'Condition could not be assessed from the photos' : util ? 'No flagged condition' : esc(L.type[r.type] || 'Other object')}</span>`;
+    const also = flags.slice(1);
+    // Finding, where, when. The rationale is not repeated here: it belongs to "Model findings"
+    // directly below, and printing it twice was the longest thing in the old panel.
+    const primary = `<div class="primary">
+        <div class="ctx">${ctx}</div>
+        <div class="lead">${leadChip}</div>
+        <div class="where"><span class="mono">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span><span>Photo shown <b class="mono">${esc(dateLabel(r.shown))}</b> <span class="muted">${esc(PP.ageLabel(r.shown.ts, state.now))}</span></span>${mapsLinks(r)}</div>
+        ${also.length ? `<div class="also"><span class="lbl">Also found:</span>${also.map(k => `<span class="flag ${flagCls(k)}">${esc(L.flag[k])}</span>`).join('')}</div>` : ''}
+      </div>`;
     const attrs = [
-      `${esc(L.type[r.type] || r.type)} · ${esc(L.mat[r.material] || r.material)}`,
+      `${L.type[r.type] || r.type} · ${L.mat[r.material] || r.material}`,
       !PP.possibleLean(r) && !PP.leanWarning(r) && (L.lean[r.lean] || r.lean),
       !PP.crossarmDamage(r) && (L.xarm[r.xarm] || r.xarm),
       !PP.vegetationContact(r) && (L.veg[r.veg] || r.veg),
       !PP.transformerVisible(r) && xfmrLabel(r),
       !PP.attachments3(r) && attLabel(r),
-    ].filter(Boolean).map(t => `<div class="it"><span>${t}</span></div>`).join('');
+    ].filter(Boolean).map(t => `<div class="it"><span>${esc(t)}</span></div>`).join('');
     const agree = r.n > 1 ? `<p class="hint">Combined from ${r.n} photos${r.seq > 1 ? ` across ${r.seq} drives` : ' from one drive'}; each field takes the most common value. Photos from one drive are not independent views.</p>` : '';
     const reviewSec = util && flags.length ? `<div class="sec review"><h3>Your review</h3><p class="q">Does the photo support the flag? This records what the photos show, not field condition.</p>
             ${flags.map(k => `<div class="it"><span>${esc(L.flag[k])}</span><span class="seg" role="group" aria-label="Does the photo support ${esc(L.flag[k])}?">${['supported', 'not_supported', 'cannot_tell'].map(v => `<button class="${v === 'supported' ? 'yes' : ''}" data-rf="${k}" data-rv="${v}" aria-pressed="${rv.flags[k] === v}" title="${L.reviewLong[v]}">${L.review[v]}</button>`).join('')}</span></div>`).join('')}
             <textarea id="rnote" maxlength="500" placeholder="Note (optional)" aria-label="Review note">${esc(rv.note || '')}</textarea>
-            <p class="hint">Saved in this browser only. <button class="btn sm" id="rreset">Clear</button> <button class="btn sm" id="nextun">Next unreviewed</button></p></div>` : '';
+            <div class="review-foot"><span class="hint" style="margin:0">Saved in this browser only.</span><button class="btn sm bd" id="rreset">Clear</button><button class="btn sm bd" id="nextun">Next unreviewed</button></div></div>` : '';
     $('detail').innerHTML = `
-      <div class="detail-h"><button class="btn sm" id="back" aria-label="Back to list">← List</button><span class="id">${esc(r.id)}</span><span class="pos" id="pos"></span>
-        <div class="nav"><button class="btn sm" id="prev" aria-label="Previous pole">Prev</button><button class="btn sm" id="next" aria-label="Next pole">Next</button><a class="btn sm sv" id="streetview" href="${`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(r.lat.toFixed(6) + ',' + r.lon.toFixed(6))}`}" target="_blank" rel="noopener" title="Google Street View here — a different provider on a different date, so it is an independent check on what is standing now">Street View ↗</a><button class="btn sm" id="share">Copy link</button><button class="btn sm" id="close" aria-label="Close details">Close</button></div></div>
+      <div class="detail-h"><button class="btn sm act" id="back">← Back to results</button>
+        <button class="btn sm" id="list-toggle" aria-pressed="${state.listOpen !== false}" aria-label="Show or hide the results list" title="Show or hide the results list">List</button>
+        <span class="sep" aria-hidden="true"></span><span class="id">${esc(r.id)}</span><span class="pos" id="pos"></span>
+        <div class="nav"><button class="btn sm bd" id="prev" aria-label="Previous pole">Prev</button><button class="btn sm bd" id="next" aria-label="Next pole">Next</button>
+          <span class="sep" aria-hidden="true"></span>
+          <a class="btn sm act" id="streetview" href="${esc(panoUrl(r))}" target="_blank" rel="noopener" title="Google Street View here — a different provider on a different date, so it is an independent check on what is standing now">Street View ↗</a><button class="btn sm act" id="share">Copy link</button><button class="btn sm" id="close" aria-label="Close details">Close</button></div></div>
       ${state.example ? `<div class="example-tag">Example record. Pick any pole from the list or map.</div>` : ''}
       <div class="dbody">
         <div class="dphoto">
-          <div class="stage">${photo}${f && f.img ? ovbar + key : ''}</div>
-          <div class="cap"><span><b>${esc(dateLabel(f))}</b> <span class="muted">${esc(PP.ageLabel(f && f.ts, state.now))}</span>${f && f.pano ? ' · 360°' : ''}${f && f.shown ? (r.shown.newest ? ' · newest readable' : ' · clearest available') : ''}</span>
-            ${f && f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">Source ↗</a>` : ''}${f && f.img ? `<a href="#" id="enlarge">Enlarge</a>` : ''}${f && f.by ? `<span class="muted small">by ${esc(f.by)}</span>` : ''}${latest}</div>
+          <div class="stage">${photo}${f && f.img ? ovbar : ''}</div>
+          <div class="cap"><span><b class="when">${esc(dateLabel(f))}</b> <span class="muted">${esc(PP.ageLabel(f && f.ts, state.now))}</span>${f && f.pano ? ' · 360°' : ''}${f && f.shown ? (r.shown.newest ? ' · newest readable' : ' · clearest available') : ''}</span>
+            ${f && f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">Source ↗</a>` : ''}${f && f.img ? `<button class="lnk" id="enlarge">Enlarge</button>` : ''}${f && f.by ? `<span class="muted small">by ${esc(f.by)}</span>` : ''}${latest}</div>
           ${strip}
         </div>
         <div class="dtext">
-          <div class="sec"><h3>Why this record is listed</h3><div class="why">${why}</div>${agree}</div>
-          ${reviewSec}
-          <div class="sec"><h3>Other visible attributes</h3><div class="fl">${attrs}</div>${f ? `<p class="hint">This photo: ${frameObs(f).map(esc).join(' · ')}.</p>` : ''}</div>
+          ${primary}
           <div class="sec"><h3>Location</h3><div class="mini" id="mini"></div>
-            <div class="kv">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)} <span>· ${r.nfeat} detection${r.nfeat === 1 ? '' : 's'} · estimate</span> · <button class="btn sm" id="fullmap">Full map</button> ${mapsLinks(r)}</div></div>
+            <div class="kv"><span>Position estimated from ${r.nfeat} detection${r.nfeat === 1 ? '' : 's'}</span> · <button class="btn sm bd" id="fullmap">Full map</button></div></div>
+          <div class="sec"><h3>Model findings</h3><div class="why">${why}</div>${agree}</div>
+          ${reviewSec}
+          <details class="sec fold"><summary>Other visible attributes</summary><div class="fl">${attrs}</div>${f ? `<p class="hint">This photo: ${frameObs(f).map(esc).join(' · ')}.</p>` : ''}</details>
           <details class="sec tech"><summary>Technical details</summary>
             ${util ? tiltHtml(r) : ''}
             ${D.meta.osm && util ? `<p class="small">${Number.isFinite(r.osm) ? `Nearest OpenStreetMap pole ${r.osm.toFixed(0)} m away` : 'No OpenStreetMap pole within 25 m'}. OSM is volunteer mapping, not the utility's inventory.</p>` : ''}
             <p class="small muted">Raw model output per photo. Self-rating is uncalibrated. Notes are free text and may overstate.</p>
-            <table><thead><tr><th>Photo</th><th>Pole px</th><th>Type</th><th>Lean</th><th>Tilt</th><th>Crossarm</th><th>Veg.</th><th>Xfmr</th><th>Att.</th><th>Self-rating</th><th>Note</th></tr></thead>
-            <tbody>${r.frames.map(x => `<tr><td class="mono">${esc(x.date || '?')}${x.pano ? ' 360°' : ''}</td><td class="mono">${x.px ?? ''}</td><td>${esc(x.type)}</td><td>${esc(x.lean)}</td><td class="mono">${Number.isFinite(x.tilt) ? `${x.tilt}°` : ''}</td><td>${esc(x.xarm)}</td><td>${esc(x.veg)}</td><td>${x.xfmr ? 'yes' : 'no'}</td><td class="mono">${x.att ?? ''}</td><td class="mono">${x.conf ?? ''}</td><td>${esc(x.note)}</td></tr>`).join('')}</tbody></table>
+            <div class="tech-wrap"><table><thead><tr><th>Photo</th><th>Pole px</th><th>Type</th><th>Lean</th><th>Tilt</th><th>Crossarm</th><th>Veg.</th><th>Xfmr</th><th>Att.</th><th>Self-rating</th><th>Note</th></tr></thead>
+            <tbody>${r.frames.map(x => `<tr><td class="mono">${esc(x.date || '?')}${x.pano ? ' 360°' : ''}</td><td class="mono">${x.px ?? ''}</td><td>${esc(x.type)}</td><td>${esc(x.lean)}</td><td class="mono">${Number.isFinite(x.tilt) ? `${x.tilt}°` : ''}</td><td>${esc(x.xarm)}</td><td>${esc(x.veg)}</td><td>${x.xfmr ? 'yes' : 'no'}</td><td class="mono">${x.att ?? ''}</td><td class="mono">${x.conf ?? ''}</td><td>${esc(x.note)}</td></tr>`).join('')}</tbody></table></div>
             <p class="small muted">Mapillary features: <span class="mono">${r.features.map(esc).join(', ')}</span> · grouped within ${esc(D.meta.method.radius_m)} m · demo id, not an asset id.</p></details>
         </div>
       </div>`;
@@ -387,14 +524,14 @@
     };
     if (mapInstance) { try { mapInstance.remove(); } catch (e) { /* already gone */ } mapInstance = null; }
     box.innerHTML = '';
-    if (typeof window.maplibregl === 'undefined') return fail(window.__maplibreFailed ? 'The map library could not be loaded (blocked or offline). The list, photos, reviews, and exports still work.' : 'The map library did not load.', true);
-    if (!webglOk()) return fail('This browser has no WebGL, which the map needs. The list, photos, reviews, and exports still work.', false);
+    if (typeof window.maplibregl === 'undefined') return fail(window.__maplibreFailed ? 'Map unavailable (the library was blocked or is offline). Showing list view.' : 'Map unavailable: the library did not load. Showing list view.', true);
+    if (!webglOk()) return fail('Map unavailable in this browser. Showing list view.', false);
     let map;
     try {
       map = new maplibregl.Map({ container: 'map', center: D.meta.center, zoom: 14.5, attributionControl: true,
         style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap contributors' } },
                  layers: [{ id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-saturation': -0.6, 'raster-opacity': 0.9 } }] } });
-    } catch (e) { return fail('The map could not start. The list, photos, reviews, and exports still work.', true); }
+    } catch (e) { return fail('Map unavailable: it could not start. Showing list view.', true); }
     mapInstance = map;
     mapState('loading', 'Loading map…');
     $('legend').hidden = false; $('fit').hidden = false; $('resetview').hidden = false;
@@ -436,7 +573,7 @@
       toMain() { if (mode !== 'mini') return; $('mapwrap').insertBefore(box, $('mapwrap').firstChild); mode = 'main'; map.resize(); },
     };
     function renderLegend() {
-      const cond = `<div><i style="background:#c2410c"></i>Possible condition issue</div><div><i class="warn"></i>Slight lean, watch item</div><div><i style="background:#fff"></i>No model flag</div><div><i style="background:#e3e3df"></i>Cannot tell from photos</div>`;
+      const cond = `<div><i style="background:#c2410c"></i>Possible condition issue</div><div><i class="warn"></i>Slight lean, watch item</div><div><i style="background:#fff"></i>No flagged condition</div><div><i style="background:#e3e3df"></i>Cannot tell from photos</div>`;
       const att = `<div><i style="background:#2c6e6b"></i>3 or more attachments</div><div><i style="background:#9ccbc9"></i>1 to 2 attachments</div><div><i style="background:#fff"></i>No attachments seen</div><div><i style="background:#e3e3df"></i>Cannot tell</div>`;
       $('legend').innerHTML = `<label>Color by <select id="cmode"><option value="condition"${state.colorMode === 'condition' ? ' selected' : ''}>condition flags</option><option value="attachments"${state.colorMode === 'attachments' ? ' selected' : ''}>attachment estimate</option></select></label>
         ${state.colorMode === 'condition' ? cond : att}${state.other ? '<div><i style="background:#bcbcb7"></i>Other detected object</div>' : ''}<div><i style="border-color:#1b5e8a;border-width:3px;background:none"></i>Selected</div>`;
@@ -445,7 +582,7 @@
     return api;
   }
   function retryMap() {
-    if (mapAttempt++ > 0) { mapState('failed', 'The map still could not load. The list, photos, reviews, and exports work without it.', false); return; }
+    if (mapAttempt++ > 0) { mapState('failed', 'Map still unavailable. Showing list view; photos, reviews, and exports are unaffected.', false); return; }
     const start = () => { mapApi = initMap(); if (state.selected && !mapApi.failed) { mapApi.toMini(); mapApi.select(byId[state.selected]); } };
     if (typeof window.maplibregl !== 'undefined') { start(); return; }
     mapState('loading', 'Loading the map library…');
@@ -520,34 +657,81 @@
     const h = d.querySelector('h2, .bar'); if (h && h.focus) { h.setAttribute('tabindex', '-1'); h.focus(); }
     d.addEventListener('close', () => { if (dialogOpener && dialogOpener.focus) dialogOpener.focus(); dialogOpener = null; }, { once: true });
   }
-  function openAbout(opener) { openDialog('about-dlg', opener); if (location.hash === '#about') history.replaceState(null, '', location.pathname + location.search + (state.selected ? `#pole=${encodeURIComponent(state.selected)}` : '')); }
+  // "#about" is an action, not a route. Opening it puts the record and issue context straight back
+  // into the URL so closing the dialog cannot lose the view the reader was on.
+  function openAbout(opener) { openDialog('about-dlg', opener); if (location.hash === '#about') writeHash(false); }
 
   // ---------- wiring ----------
+  // Popovers are rebuilt with their panel (the annotations one lives inside the record), so both
+  // ends are optional here rather than assumed present.
   function toggleMenu(btnId, menuId, open) {
-    const m = $(menuId), b = $(btnId); const o = open == null ? m.hidden : open; m.hidden = !o; b.setAttribute('aria-expanded', String(o));
+    const m = $(menuId), b = $(btnId); if (!m || !b) return;
+    const o = open == null ? m.hidden : open; m.hidden = !o; b.setAttribute('aria-expanded', String(o));
+    if (o && typeof m.scrollTop === 'number') m.scrollTop = 0;
   }
-  const MENUS = [['dates-btn', 'dates-menu'], ['more-btn', 'more-menu'], ['export-btn', 'export-menu']];
-  const closeMenus = except => MENUS.forEach(([b, m]) => { if (b !== except) toggleMenu(b, m, false); });
-  // Below 1560 px the review group, and below 1300 px the equipment group too, live inside "More filters" so the toolbar never wraps.
+  const MENUS = [['dates-btn', 'dates-menu'], ['more-btn', 'more-menu'], ['export-btn', 'export-menu'], ['ann-btn', 'ann-menu']];
+  const closeMenus = except => MENUS.forEach(([b, m]) => { if (b !== except && $(b) && $(m)) toggleMenu(b, m, false); });
+  // Which filter groups live inside "More filters", in the order they are given up. Fitted pixel
+  // breakpoints were wrong per area (chip labels and counts differ), so this measures instead: fold
+  // one group at a time until the toolbar's single row actually fits. The tools block (dates, more,
+  // sort, export) is never folded and never clips, and .filters can still wrap as a last resort.
+  const FOLDABLE = ['g-review', 'g-equip'];
+  // Where each group belongs when it comes back, read from the markup at startup rather than
+  // restated here: a hand-written list drifts from index.html and silently reorders the toolbar.
+  const GROUP_ORDER = (() => { const f = document.getElementById('filters'); return f ? [...f.children].map(g => g.id).filter(Boolean) : []; })();
   function foldToolbar() {
-    const w = window.innerWidth, fold = $('more-fold');
-    [['g-review', 1560], ['g-equip', 1300]].forEach(([id, min]) => { const g = $(id); if (!g) return; const narrow = w < min; if (narrow && g.parentNode !== fold) fold.appendChild(g); else if (!narrow && g.parentNode === fold) $('toolbar').insertBefore(g, $('toolbar').querySelector('.spacer')); });
+    const fold = $('more-fold'), filters = $('filters'), bar = $('toolbar');
+    if (!fold || !filters || !bar) return;
+    // Re-insert in the group's original position; appending reversed Equipment and Review.
+    const unfold = g => {
+      if (g.parentNode !== fold) return;
+      const i = GROUP_ORDER.indexOf(g.id);
+      const after = i < 0 ? null : GROUP_ORDER.slice(i + 1).map($).find(x => x && x.parentNode === filters);
+      filters.insertBefore(g, after || null);
+    };
+    const put = g => { if (g.parentNode !== fold) fold.appendChild(g); };
+    const groups = FOLDABLE.map($).filter(Boolean);
+    const tools = bar.querySelector('.tools');
+    // No layout in the test DOM: keep the old width thresholds there so behaviour stays deterministic.
+    if (typeof filters.getBoundingClientRect !== 'function' || !tools) {
+      const w = typeof window.innerWidth === 'number' ? window.innerWidth : 1440;
+      [['g-review', 1560], ['g-equip', 1300]].forEach(([id, min]) => { const g = $(id); if (g) (w < min ? put : unfold)(g); });
+      return;
+    }
+    if (window.innerWidth < 900) { groups.forEach(unfold); return; }  // mobile stacks the whole toolbar
+    // Fits = the filter groups are on one line and the tools block is on that same line. Both
+    // containers wrap rather than overflow, so this is a height/position test, not a width test.
+    const fits = () => {
+      const fr = filters.getBoundingClientRect(), tr = tools.getBoundingClientRect();
+      const g = filters.querySelector('.group');
+      const gh = g ? g.getBoundingClientRect().height : fr.height;
+      return fr.height <= gh + 6 && Math.abs(fr.top - tr.top) <= 4;
+    };
+    groups.forEach(unfold);
+    for (const g of groups) { if (fits()) break; put(g); }
+    moreBadge();
   }
   function wire() {
     document.addEventListener('click', e => {
-      const chip = e.target.closest('.chip'); if (chip && chip.dataset.f) { state.flag = state.flag === chip.dataset.f && chip.dataset.f !== 'all' ? 'all' : chip.dataset.f; refresh(); return; }
+      // The active issue is part of the shared view, so changing it rewrites the URL in place.
+      const chip = e.target.closest('.chip'); if (chip && chip.dataset.f) { state.flag = state.flag === chip.dataset.f && chip.dataset.f !== 'all' ? 'all' : chip.dataset.f; refresh(); writeHash(false); if (state.selected) renderDetail(); return; }
       const rs = e.target.closest('#review-seg button'); if (rs) { state.review = rs.dataset.rs; refresh(); return; }
       const ab = e.target.closest('a[href="#about"]'); if (ab) { e.preventDefault(); openAbout(ab); return; }
+      if (e.target.closest('#notice-btn')) { openAbout($('notice-btn')); return; }
       if (!e.target.closest('.menu')) closeMenus();
     });
     ['year-min', 'year-max'].forEach(id => $(id).addEventListener('change', () => { state.recent = false; $('recent').checked = false; readYearInputs(); refresh(); }));
     $('recent').addEventListener('change', e => { state.recent = e.target.checked; readYearInputs(); refresh(); });
     $('sort').addEventListener('change', e => { state.sort = e.target.value; refresh(); });
-    $('reset').addEventListener('click', () => { resetFilters(); closeMenus(); });
+    $('reset').addEventListener('click', () => { resetFilters(); writeHash(false); closeMenus(); });
+    $('more-done').addEventListener('click', () => { closeMenus(); $('more-btn').focus(); });
+    $('list-rail').addEventListener('click', () => { setListOpen(true); const row = document.querySelector('.row'); if (row) row.focus(); });
     $('other').addEventListener('change', e => { state.other = e.target.checked; state.flag = 'all'; refresh(); if (mapApi) mapApi.recolor(); });
     $('years').addEventListener('change', e => { state.years = e.target.checked; refresh(); });
     $('osm').addEventListener('change', e => { state.osm = e.target.checked; refresh(); });
-    MENUS.forEach(([b, m]) => $(b).addEventListener('click', () => { closeMenus(b); toggleMenu(b, m); }));
+    // The annotations popover is rebuilt with each record, so it is wired in the detail handler,
+    // not here; only the toolbar's own menus exist at wire() time.
+    MENUS.forEach(([b, m]) => { const el = $(b); if (el) el.addEventListener('click', () => { closeMenus(b); toggleMenu(b, m); }); });
     $('count').addEventListener('click', e => { if (e.target.id === 'reset2') resetFilters(); });
     $('active').addEventListener('click', e => { if (e.target.id === 'reset4') resetFilters(); });
     $('list').addEventListener('click', e => {
@@ -561,17 +745,21 @@
     });
     $('detail').addEventListener('click', e => {
       const pt = e.target.closest && e.target.closest('.tilt .pt'); if (pt) { state.viewing = +pt.dataset.i; state.compare = false; renderDetail(); return; }
-      const t = e.target.closest('button, a#enlarge'); if (!t) return;
+      const t = e.target.closest('button'); if (!t) return;
+      if (t.id === 'ann-btn') { toggleMenu('ann-btn', 'ann-menu'); return; }
+      if (t.id === 'list-toggle') { setListOpen(!state.listOpen); t.setAttribute('aria-pressed', String(state.listOpen)); return; }
       if (t.id === 'back' || t.id === 'close') { close(); return; }
       if (t.id === 'fullmap') { close(true); return; }
       if (t.id === 'prev') { step(-1); return; } if (t.id === 'next') { step(1); return; }
       if (t.id === 'nextun') { nextUnreviewed(); return; }
-      if (t.id === 'share') { const url = location.origin + location.pathname + `#pole=${encodeURIComponent(state.selected)}`; if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => { t.textContent = 'Copied'; setTimeout(() => { t.textContent = 'Copy link'; }, 1500); }); return; }
-      if (t.id === 'enlarge') { e.preventDefault(); const f = byId[state.selected].frames[state.viewing]; $('lb-img').src = f.img; $('lb-img').alt = `Photo of pole ${state.selected} taken ${dateLabel(f)}`; $('lb-cap').textContent = `${state.selected} · ${dateLabel(f)}`; $('lb-src').href = f.url; openDialog('lb', t); return; }
+      // Copies the record AND the issue context, so reloading the link reproduces this result set.
+      if (t.id === 'share') { const url = shareUrl(); if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => { t.textContent = 'Copied'; setTimeout(() => { t.textContent = 'Copy link'; }, 1500); }); return; }
+      if (t.id === 'enlarge') { const f = byId[state.selected].frames[state.viewing]; $('lb-img').src = f.img; $('lb-img').alt = `Photo of pole ${state.selected} taken ${dateLabel(f)}`; $('lb-cap').textContent = `${state.selected} · ${dateLabel(f)}`; $('lb-src').href = f.url; openDialog('lb', t); return; }
       if (t.id === 'cmp') { state.compare = !state.compare; renderDetail(); $('cmp').focus(); return; }
       if (t.id === 'rreset') { delete review[state.selected]; saveReview(review); renderDetail(); refreshRowStatus(); renderChips(); return; }
       const k = { 'tg-outline': 'outline', 'tg-markers': 'markers', 'tg-badges': 'badges' }[t.id];
-      if (k) { state[k] = !state[k]; renderDetail(); $(t.id).focus(); return; }
+      // Re-rendering rebuilds the popover closed; put it back so several marks can be toggled in one go.
+      if (k) { state[k] = !state[k]; renderDetail(); toggleMenu('ann-btn', 'ann-menu', true); if ($(t.id)) $(t.id).focus(); return; }
       if (t.dataset.i != null) { state.viewing = +t.dataset.i; state.compare = false; renderDetail(); const n = $('detail').querySelector(`[data-i="${state.viewing}"]`); if (n) n.focus(); return; }
       if (t.dataset.rf) { const rv = review[state.selected] || { flags: {}, note: '' }; rv.flags[t.dataset.rf] = rv.flags[t.dataset.rf] === t.dataset.rv ? null : t.dataset.rv; review[state.selected] = touch(rv); saveReview(review); renderDetail(); refreshRowStatus(); renderChips(); $('detail').querySelector(`[data-rf="${t.dataset.rf}"][data-rv="${t.dataset.rv}"]`).focus(); }
     });
@@ -580,7 +768,13 @@
       e.preventDefault(); state.viewing = +pt.dataset.i; state.compare = false; renderDetail(); const n = $('detail').querySelector(`.tilt .pt[data-i="${state.viewing}"]`); if (n && n.focus) n.focus();
     });
     $('detail').addEventListener('input', e => { if (e.target.id === 'rnote') { const rv = review[state.selected] || { flags: {}, note: '' }; rv.note = e.target.value; review[state.selected] = touch(rv); saveReview(review); } });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && state.selected && !document.querySelector('dialog[open]')) close(); });
+    // Escape backs out one layer at a time: an open popover first, then the record.
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
+      const open = MENUS.find(([b, m]) => $(m) && !$(m).hidden);
+      if (open) { toggleMenu(open[0], open[1], false); if ($(open[0])) $(open[0]).focus(); return; }
+      if (state.selected) close();
+    });
     $('lb-close').addEventListener('click', () => $('lb').close());
     $('about-close').addEventListener('click', () => $('about-dlg').close());
     $('import-close').addEventListener('click', () => $('import-dlg').close());
@@ -593,16 +787,18 @@
     $('map-notice').addEventListener('click', e => { if (e.target.id === 'map-retry2') retryMap(); });
     $('filters-toggle').addEventListener('click', () => { const open = $('toolbar').classList.toggle('open'); $('filters-toggle').setAttribute('aria-expanded', String(open)); });
     document.querySelectorAll('.mobilebar [role=tab]').forEach(b => b.addEventListener('click', () => { state.tab = b.dataset.tab; $('ws').dataset.tab = state.tab; document.querySelectorAll('.mobilebar [role=tab]').forEach(x => x.setAttribute('aria-selected', String(x === b))); if (mapApi) mapApi.resize(); }));
-    const sizeWs = () => {
-      foldToolbar();
-      if (window.innerWidth >= 900) { const top = $('ws').offsetTop, foot = document.querySelector('.foot'); $('ws').style.height = Math.max(480, window.innerHeight - top - (foot ? foot.offsetHeight : 0)) + 'px'; } else { $('ws').style.height = ''; }
-      if (mapApi) mapApi.resize();
-    };
+    // The workspace fills the space left by the header, toolbar and footer through the body flex
+    // column now, so there is no height to compute and nothing can slide under the footer.
+    const sizeWs = () => { foldToolbar(); if (mapApi) mapApi.resize(); };
     window.addEventListener('resize', sizeWs); sizeWs(); state.sizeWs = sizeWs;
-    window.addEventListener('hashchange', () => { if (location.hash === '#about') { openAbout(null); return; } const id = parseHash(); if (id && id !== state.selected) select(id, { silent: true }); });
+    // The first measurement runs before the web font has swapped in, which makes every chip the
+    // wrong width and folds groups that would have fitted. Measure again once layout has settled.
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(foldToolbar));
+    if (document.fonts && document.fonts.ready && document.fonts.ready.then) document.fonts.ready.then(foldToolbar).catch(() => {});
+    window.addEventListener('popstate', () => { if (location.hash === '#about') { openAbout(null); return; } syncFromHash(); });
+    window.addEventListener('hashchange', () => { if (location.hash === '#about') { openAbout(null); return; } syncFromHash(); });
   }
   function refreshRowStatus() { document.querySelectorAll('.row').forEach(el => { const r = byId[el.dataset.id]; if (r) el.outerHTML = rowHtml(r); }); document.querySelectorAll('.row').forEach(el => el.setAttribute('aria-selected', String(el.dataset.id === state.selected))); }
-  function parseHash() { const m = /[#&]pole=([^&]+)/.exec(location.hash); return m ? decodeURIComponent(m[1]) : null; }
 
   // ---------- territories ----------
   // The deployed site holds one bundle per territory under /<slug>/ and a territories.json at the root.
@@ -628,10 +824,13 @@
     if (D.meta.osm) $('osm-wrap').hidden = false;
     wire();
     readYearInputs();
+    // The issue context is applied BEFORE the first refresh, so a shared link opens its record
+    // inside the result set it was shared from ("3 of 27") rather than inside all poles.
+    const h = parseHash();
+    if (h.issue) state.flag = h.issue;
     refresh();
-    const id = parseHash();
-    if (id) {
-      if (!select(id, { silent: true, focus: false })) $('count').insertAdjacentHTML('afterend', `<div class="empty">No record with id <span class="mono">${esc(id)}</span> in this dataset.</div>`);
+    if (h.pole) {
+      if (!select(h.pole, { silent: true, focus: false })) $('count').insertAdjacentHTML('afterend', `<div class="empty">No record with id <span class="mono">${esc(h.pole)}</span> in this dataset.</div>`);
     }  // no record opens by default: the first view is the list beside the map
     mapApi = initMap();
     if (state.selected && !mapApi.failed) { mapApi.toMini(); mapApi.select(byId[state.selected]); }
@@ -639,5 +838,5 @@
     initTerritories();
   }
   try { init(); } catch (e) { $('count').textContent = 'The page failed to initialize.'; console.error(e); }
-  window.PolePass = { state, select, close, refresh, nextUnreviewed, retryMap, get filtered() { return filtered; }, get review() { return review; } };
+  window.PolePass = { state, select, close, refresh, nextUnreviewed, retryMap, syncFromHash, setListOpen, get filtered() { return filtered; }, get review() { return review; } };
 })();

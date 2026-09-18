@@ -203,3 +203,62 @@ every page is the standing substitute and must not be removed while it is true.)
 - [ ] `district.py` refuses multi-village districts (needs a polygon union, not implemented).
       Waban + Newton Upper Falls were measured and are viable if more Newton coverage is wanted:
       ~$28 for two villages, ~$41 for three.
+
+## Interface redesign — 2026-09-18 (branch `feature/interface-redesign`, not deployed)
+
+General redesign of the area page against a written brief, audited first against the
+published Marblehead build with headless Chrome. Data, classification, dedupe, flag
+semantics, exports, review storage, record ids and attribution are untouched.
+
+### P0
+- [x] **Deep link landed below the fold.** Root cause was not width: `.ws.map-failed`
+      forced one grid column, so an open record wrapped to a second row under the whole
+      browse list. The audit browser had no WebGL. The fallback is now scoped to browse
+      (`.ws.map-failed:not(.has-detail)`) and grid children are placed explicitly.
+- [x] **Filter bar clipped Export at 1363 px.** Fitted 1560/1300 breakpoints replaced by
+      a measured progressive fold; containers wrap rather than clip as a backstop.
+- [x] **No-WebGL fallback looked broken.** Compact notice plus a deliberate multi-column
+      result layout; row is thumbnail | findings | meta so the id no longer floats away.
+- [x] **Primary finding was wrong, not just mis-ordered.** `flagLabel` had no `double`
+      branch and fell through to the transformer label (see lessons.md). Fixed, plus
+      `PP.orderFlags()` leads with the active filter and otherwise a documented
+      `CONDITION_PRIORITY` severity order (crossarm, double, lean, vegetation).
+- [x] **Shared links lost filter context.** `#pole=<id>&issue=<FILTERS key>`, applied
+      before the first refresh so the position reads "3 of 27"; Copy link emits both;
+      `pushState` + `popstate` so Back returns to a previous view.
+
+### P1 / P2
+- [x] More filters is an anchored popover with its own scroll (drawer under 900 px);
+      opening it no longer lengthens the page.
+- [x] Findings panel reordered: primary finding, location, model findings, review,
+      then collapsed "Other visible attributes" and "Technical details".
+      "Why this record is listed" -> "Model findings".
+- [x] Three annotation buttons + permanent legend -> one Annotations popover with the key.
+- [x] Enlarge is a button; About preserves pole and issue state.
+- [x] Colour meanings fixed (blue actions, orange conditions, green reviewed only, red
+      errors only). Street View moved off the issue colour; the experimental notice is a
+      neutral chip and is still permanent. Contact demoted to "Contact / feedback".
+- [x] Rows show the absolute date only; "No model flag" -> "No flagged condition".
+- [x] Workspace height is CSS-driven (body flex column, viewport-bounded on desktop), so
+      no JS height math and nothing sits under the footer.
+
+### Counts wording — deliberate, and the one thing to look at
+The header says **"582 poles · 231 poles with at least one flag · imagery from 2023–2025"**,
+which is the brief's wording chosen by the owner after the mismatch was pointed out.
+231 is poles with at least one **condition** flag; 389 poles carry a flag of some kind.
+To stop the two contradicting each other on the same screen, the review denominator reads
+"0 / 389 with something to review" rather than "flagged", and the header tooltip plus a new
+"What the counts mean" section in About state each population exactly. Making the header
+itself precise is one string in `renderSummary()`.
+
+### Verification run
+- `node --test tests/*.test.js` 44 pass; `uv run python3 -m unittest discover -s tests` 98 pass.
+- All five bundles rebuilt from cache, no API calls; all five boot clean with no console
+  errors and no horizontal scroll at 1440.
+- Headless Chrome at 2048x1024, 1440x900, 1363x936, 390x844, with and without WebGL:
+  deep link above the fold, Export never clipped, list collapse/reopen, Back navigation,
+  primary finding follows all seven issue filters generically.
+- Before/after screenshots captured from a `main` worktree build of the same area.
+
+### Not done
+- [ ] Not deployed. `./deploy.sh` with all five slugs once the screenshots are approved.

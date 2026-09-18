@@ -14,69 +14,73 @@
 <header class="hdr">
   <a class="brand" href="../" title="All areas">Pole Pass</a>
   <span class="loc"><select id="territory" aria-label="Area" hidden></select><span id="loc-name">{{LOCATION}}</span><span class="kind" id="kind" hidden></span></span>
-  <span class="sum" id="summary" aria-label="Summary"></span>
-  <a class="notice-inline" href="#about" title="{{VALIDATION_NOTICE}}">{{VALIDATION_SHORT}}</a>
+  <span class="sum" id="summary" aria-label="Dataset summary"></span>
+  <button class="notice-inline" id="notice-btn" title="{{VALIDATION_NOTICE}}">{{VALIDATION_SHORT}}</button>
   <nav>
-    <a class="btn" href="#about">About</a>
+    <a class="btn sm" href="#about">About</a>
     {{CONTACT_NAV}}
   </nav>
 </header>
 
 <div class="toolbar" id="toolbar">
-  <div class="group" id="g-issues" role="group" aria-label="Possible issues"><span class="gl">Issues</span><div class="chips" id="chips"></div></div>
-  <div class="group" id="g-equip" role="group" aria-label="Equipment"><span class="gl">Equipment</span><div class="chips" id="chips-eq"></div></div>
-  <div class="group" id="g-review" role="group" aria-label="Review status"><span class="gl">Review</span>
-    <span class="seg" id="review-seg"><button data-rs="all" aria-pressed="true">All</button><button data-rs="unreviewed" aria-pressed="false">Unreviewed</button><button data-rs="reviewed" aria-pressed="false">Reviewed</button></span>
-    <span class="mono small muted" id="review-n" title="Poles with at least one flag to review"></span></div>
-  <span class="spacer"></span>
-  <div class="menu">
-    <button class="btn sm" id="dates-btn" aria-haspopup="true" aria-expanded="false">Photos <span id="dates-label" class="mono"></span> ▾</button>
-    <div class="menu-list wide" id="dates-menu" hidden>
-      <div class="h">Capture date of the photo shown</div>
-      <div class="row2"><label for="year-min">From</label><input type="number" id="year-min" aria-label="Earliest photo year" inputmode="numeric"><label for="year-max">to</label><input type="number" id="year-max" aria-label="Latest photo year" inputmode="numeric"></div>
-      <label class="chk"><input type="checkbox" id="recent"> Within the last 24 months <span class="mono" id="recent-n"></span></label>
-      <p class="hint">The photo shown is the newest assessed photo where the pole is readable, so it can be older than the latest photo available. Ages count from the capture date.</p>
-    </div>
+  <div class="filters" id="filters">
+    <div class="group" id="g-issues" role="group" aria-label="Possible issues"><span class="gl">Issues</span><div class="chips" id="chips"></div></div>
+    <div class="group" id="g-equip" role="group" aria-label="Equipment"><span class="gl">Equipment</span><div class="chips" id="chips-eq"></div></div>
+    <div class="group" id="g-review" role="group" aria-label="Review status"><span class="gl">Review</span>
+      <span class="seg" id="review-seg"><button data-rs="all" aria-pressed="true">All</button><button data-rs="unreviewed" aria-pressed="false">Unreviewed</button><button data-rs="reviewed" aria-pressed="false">Reviewed</button></span>
+      <span class="mono small muted" id="review-n" title="Poles carrying a flag of any kind — condition, watch item, 3+ attachments or a transformer. These are the records with something to decide."></span></div>
   </div>
-  <div class="menu">
-    <button class="btn sm" id="more-btn" aria-haspopup="true" aria-expanded="false">More filters</button>
-    <div class="menu-list wide" id="more-menu" hidden>
-      <div class="h">Watch items</div>
-      <div class="chips" id="chips-more"></div>
-      <div class="h">More</div>
-      <label class="chk"><input type="checkbox" id="years"> Photographed in more than one year <span class="mono" id="years-n"></span></label>
-      <label class="chk" id="osm-wrap" hidden><input type="checkbox" id="osm"> No OpenStreetMap pole within 15 m <span class="mono" id="osm-n"></span></label>
-      <label class="chk"><input type="checkbox" id="other"> Show other detected objects instead of poles</label>
-      <div id="more-fold"></div>
-      <button class="btn sm" id="reset">Reset filters</button>
+  <div class="tools">
+    <div class="menu">
+      <button class="btn sm" id="dates-btn" aria-haspopup="dialog" aria-expanded="false">Photos <span id="dates-label" class="mono"></span> ▾</button>
+      <div class="menu-list wide" id="dates-menu" role="dialog" aria-label="Photo date range" hidden>
+        <div class="h">Capture date of the photo shown</div>
+        <div class="row2"><label for="year-min">From</label><input type="number" id="year-min" aria-label="Earliest photo year" inputmode="numeric"><label for="year-max">to</label><input type="number" id="year-max" aria-label="Latest photo year" inputmode="numeric"></div>
+        <label class="chk"><input type="checkbox" id="recent"> Within the last 24 months <span class="mono" id="recent-n"></span></label>
+        <p class="hint">The photo shown is the newest assessed photo where the pole is readable, so it can be older than the latest photo available. Ages count from the capture date.</p>
+      </div>
     </div>
-  </div>
-  <label class="sortwrap"><span class="sr">Sort</span>
-    <select id="sort" aria-label="Sort">
-      <option value="date_desc">Newest photo first</option>
-      <option value="date_asc">Oldest photo first</option>
-      <option value="flags_desc">Most flags first</option>
-      <option value="att_desc">Most attachments</option>
-    </select>
-  </label>
-  <div class="menu">
-    <button class="btn sm" id="export-btn" aria-haspopup="true" aria-expanded="false">Export</button>
-    <div class="menu-list" id="export-menu" hidden>
-      <div class="h">Filtered results, with your review columns</div>
-      <button id="exp-csv-f">CSV</button><button id="exp-geo-f">GeoJSON</button>
-      <div class="h">All records, model fields only</div>
-      <a href="poles.csv" download>CSV</a><a href="poles.geojson" download>GeoJSON</a>
-      <div class="h">Your review decisions (this browser)</div>
-      <button id="exp-review">Export JSON</button>
-      <button id="imp-review">Import JSON…</button>
-      <input type="file" id="imp-file" accept="application/json,.json" hidden>
+    <div class="menu">
+      <button class="btn sm" id="more-btn" aria-haspopup="dialog" aria-expanded="false">More filters<span class="mono dot" id="more-n" hidden></span></button>
+      <div class="menu-list wide scroll" id="more-menu" role="dialog" aria-label="More filters" hidden>
+        <div id="more-fold"></div>
+        <div class="h">Watch items</div>
+        <div class="chips" id="chips-more"></div>
+        <div class="h">More</div>
+        <label class="chk"><input type="checkbox" id="years"> Photographed in more than one year <span class="mono" id="years-n"></span></label>
+        <label class="chk" id="osm-wrap" hidden><input type="checkbox" id="osm"> No OpenStreetMap pole within 15 m <span class="mono" id="osm-n"></span></label>
+        <label class="chk"><input type="checkbox" id="other"> Show other detected objects instead of poles</label>
+        <div class="menu-foot"><button class="btn sm" id="reset">Reset filters</button><button class="btn sm" id="more-done">Done</button></div>
+      </div>
+    </div>
+    <label class="sortwrap"><span class="sr">Sort</span>
+      <select id="sort" aria-label="Sort">
+        <option value="date_desc">Newest photo first</option>
+        <option value="date_asc">Oldest photo first</option>
+        <option value="flags_desc">Most flags first</option>
+        <option value="att_desc">Most attachments</option>
+      </select>
+    </label>
+    <div class="menu">
+      <button class="btn sm" id="export-btn" aria-haspopup="dialog" aria-expanded="false">Export</button>
+      <div class="menu-list" id="export-menu" role="dialog" aria-label="Export" hidden>
+        <div class="h">Filtered results, with your review columns</div>
+        <button id="exp-csv-f">CSV</button><button id="exp-geo-f">GeoJSON</button>
+        <div class="h">All records, model fields only</div>
+        <a href="poles.csv" download>CSV</a><a href="poles.geojson" download>GeoJSON</a>
+        <div class="h">Your review decisions (this browser)</div>
+        <button id="exp-review">Export JSON</button>
+        <button id="imp-review">Import JSON…</button>
+        <input type="file" id="imp-file" accept="application/json,.json" hidden>
+      </div>
     </div>
   </div>
 </div>
 <div class="active" id="active" hidden></div>
 
 <div class="ws" id="ws" data-tab="list">
-  <section class="pane" aria-label="Poles to review">
+  <button class="rail" id="list-rail" aria-label="Show results list" hidden><span aria-hidden="true">›</span><span class="rail-t">Results</span></button>
+  <section class="pane" aria-label="Results">
     <div class="count" id="count" aria-live="polite"></div>
     <div class="map-notice" id="map-notice" hidden></div>
     <div class="list" id="list" role="listbox" aria-label="Pole records"></div>
@@ -121,6 +125,9 @@
       <li><b>Check the result.</b> Open each record to review its photos, compare views, and record your assessment.</li>
     </ol>
     <details><summary>Technical details</summary>{{TECH_DETAILS}}</details>
+
+    <h3>What the counts mean</h3>
+    <div id="about-counts"></div>
 
     <h3>What the photos cannot establish</h3>
     <p>Photos cannot establish structural condition, electrical loading, ownership, or compliance. Old images, camera angles, and obstructions can mislead the model. A record with no flag has not been inspected.{{OSM_NOTE}}</p>
