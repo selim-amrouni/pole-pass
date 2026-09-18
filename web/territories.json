@@ -2,5 +2,6 @@
   {"slug": "greenpoint-brooklyn-new-york", "name": "Greenpoint, Brooklyn", "kind": "city"},
   {"slug": "hardwick-vermont", "name": "Hardwick, Vermont", "kind": "backcountry"},
   {"slug": "reading-massachusetts", "name": "Reading, Massachusetts", "kind": "suburb"},
-  {"slug": "marblehead-massachusetts", "name": "Marblehead, Massachusetts", "kind": "suburb"}
+  {"slug": "marblehead-massachusetts", "name": "Marblehead, Massachusetts", "kind": "suburb"},
+  {"slug": "newton-lower-falls-massachusetts", "name": "Newton Lower Falls, Massachusetts", "kind": "suburb"}
 ]

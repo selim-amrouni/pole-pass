@@ -23,9 +23,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
 
+import district
 import geo
 import mvt
 import split
@@ -86,8 +88,11 @@ def polygon_bbox(polys):
     return (min(xs), min(ys), max(xs), max(ys))
 
 
-def process_feature(feat, slug, token, values, frames, thumbs_dir):
-    """Return observation rows for one map feature (cached per feature)."""
+def process_feature(feat, slug, token, values, frames, thumbs_dir, since_ms=None):
+    """Return observation rows for one map feature (cached per feature).
+
+    since_ms drops frames captured before it; see the ranking loop below for why it is applied
+    there rather than to the detection list."""
     fid = str(feat["id"])
     obs_path = DATA / "fetch" / slug / "obs" / f"{fid}.json"
     if obs_path.exists():
@@ -107,11 +112,22 @@ def process_feature(feat, slug, token, values, frames, thumbs_dir):
         ranked.append(((x1 - x0) * (y1 - y0), d, polys, (x0, y0, x1, y1)))
     ranked.sort(key=lambda r: r[0], reverse=True)
 
+    # Walk the ranking lazily rather than slicing it, because a detection's capture date is only
+    # known once its image metadata is fetched. Slicing first and filtering after would hand back
+    # fewer frames than asked for -- or none -- whenever the biggest detections happen to be old.
+    # For a double-pole pass the photo date IS the evidence, so an old frame is not worth keeping
+    # however large the pole looks in it. Image metadata is cached, so the extra look-ups are paid
+    # once. A feature with no frame at or after `since` yields no rows at all: that pole has no
+    # recent evidence, which is a real answer, not a gap to paper over.
     rows = []
-    for area, d, polys, bbox in ranked[:frames]:
+    for area, d, polys, bbox in ranked:
+        if len(rows) >= frames:
+            break
         iid = str(d["image"]["id"])
         im = cached(DATA / "fetch" / slug / "images" / f"{iid}.json",
                     lambda: graph(iid, IMAGE_FIELDS, token))
+        if since_ms is not None and (im.get("captured_at") or 0) < since_ms:
+            continue
         # panos: original resolution, since a pole is a thin sliver of the frame; flat: 2048
         url = im.get("thumb_original_url") if im.get("is_pano") else im.get("thumb_2048_url")
         url = url or im.get("thumb_2048_url") or im.get("thumb_original_url")
@@ -145,6 +161,8 @@ def main():
     ap.add_argument("--values", nargs="+", default=DEFAULT_VALUES, help="map feature object values to include")
     ap.add_argument("--frames", type=int, default=2, help="frames per feature, largest apparent pole first")
     ap.add_argument("--limit", type=int, help="only the first N features (iteration)")
+    ap.add_argument("--since", help="YYYY-MM-DD; keep only frames captured on or after this date. "
+                                    "Defaults to the district's own recorded cutoff when the area is a district.")
     ap.add_argument("--in-town", action="store_true",
                     help="keep only features inside the town boundary polygon. coverage.py enumerates a BBOX, which for "
                          "a coastal town reaches into its neighbours; without this every downstream classification pays "
@@ -160,7 +178,7 @@ def main():
     feats = [json.loads(l) for l in src.open()]
     feats = [f for f in feats if f["value"] in args.values]
     if args.in_town:
-        ring = split.town_ring(slug)
+        ring = district.ring(slug)  # district cell or town relation; --in-town means "inside the area"
         before = len(feats)
         feats = [f for f in feats if geo.point_in_polygon(f["lon"], f["lat"], [ring])]
         print(f"{slug}: {before} features in the bbox -> {len(feats)} inside the town boundary "
@@ -169,12 +187,19 @@ def main():
     if args.limit:
         feats = feats[:args.limit]
     thumbs_dir = DATA / "thumbs"
-    print(f"{slug}: {len(feats)} features with values {args.values}, {args.frames} frames each")
+    # An explicit --since wins; otherwise a district supplies its own, so a rerun months later
+    # reproduces the same vintage instead of quietly widening it.
+    if args.since:
+        since_ms = int(datetime.strptime(args.since, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000)
+    else:
+        since_ms = district.since_ms(slug)
+    when = datetime.fromtimestamp(since_ms / 1000, tz=timezone.utc).date().isoformat() if since_ms else "any date"
+    print(f"{slug}: {len(feats)} features with values {args.values}, {args.frames} frames each, frames from {when}")
 
     all_rows, fetched, errors = [], 0, []
     t0 = time.time()
     with ThreadPoolExecutor(args.workers) as ex:
-        futs = {ex.submit(process_feature, f, slug, token, set(args.values), args.frames, thumbs_dir): f for f in feats}
+        futs = {ex.submit(process_feature, f, slug, token, set(args.values), args.frames, thumbs_dir, since_ms): f for f in feats}
         for k, fut in enumerate(as_completed(futs), 1):
             try:
                 rows, was_fetched = fut.result()

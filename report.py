@@ -22,12 +22,14 @@ import argparse
 import csv
 from collections import Counter
 import hashlib
+import html
 import json
 import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import district
 import mvt
 from PIL import Image
 
@@ -49,7 +51,13 @@ DEFAULT_EXAMPLE = {"greenpoint-brooklyn-new-york": "det:619927453431602",  # woo
                    # poles, and without an example the landing card renders "No photo published".
                    # Highest-confidence double (0.75), largest pole in frame, and both poles of the
                    # pair are visible in the one shot -- the old leaning pole and its replacement.
-                   "marblehead-massachusetts": "det:843980090181831"}      # Churchill Road, pair MH-216efd11
+                   "marblehead-massachusetts": "det:843980090181831",      # Churchill Road, pair MH-216efd11
+                   # Same reasoning as Marblehead: this area exists to show double poles, so the
+                   # example leads with one. Waban Avenue, pair NEW-25b12102 -- the old pole stripped
+                   # of its hardware standing beside the replacement that now carries the crossarm
+                   # and lines, both full height and unmistakably two poles. Also the clearest case
+                   # of the distance fix: the map features are 4.87 m apart, the outlines 0.21 m.
+                   "newton-lower-falls-massachusetts": "det:1309247380868100"}
 
 
 def ms_date(ms):
@@ -245,6 +253,12 @@ def build_records(poles, out_dir, polygons, marks, osm_dist=None):
             # missing `dbl` as "not looked for" rather than "no double here".
             **({"dbl": {**{k: p["double"][k] for k in ("pair_id", "confidence", "reason", "maintainer",
                                                        "separation_m", "cut_short", "street", "cross_street", "url")},
+                        # separation_m above is now MEASURED off the two detection boxes in the shared
+                        # frame. These carry what it was measured from, so the page can say "the poles
+                        # overlap in the photo" instead of a bare number, and can show the model's own
+                        # guess beside it rather than in place of it.
+                        **{k: p["double"].get(k) for k in ("separation_model_m", "separation_widths",
+                                                           "separation_overlap")},
                         "pair_features": p["double"].get("feature_ids") or []}}
                if p.get("double") else {}),
             "shown": {"img": shown_img, "date": ms_date(p.get("best_captured_at")), "ts": p.get("best_captured_at"), "year": ms_year(p.get("best_captured_at")),
@@ -362,6 +376,30 @@ def tech_details(summary, coverage, method, tilt_meta=None, osm=None):
 </ul>"""
 
 
+def area_note(slug):
+    """The About-dialog block that belongs to this area alone, or "" for every area without one.
+
+    Two sources, deliberately kept apart. How the boundary was drawn is DERIVED from the district
+    definition, so it cannot drift from the polygon the pipeline actually used. Anything editorial --
+    who owns the poles here, what is on the public record about them -- lives in web/notes/<slug>.html,
+    version-controlled and reviewable as prose rather than buried in a format string. Territories
+    with neither render exactly as before.
+    """
+    parts = []
+    d = district.load(slug)
+    if d:
+        p = d["properties"]
+        parts.append(
+            "<h3>How this area was drawn</h3>"
+            f"<p>{html.escape(p['name'])} is one village of {html.escape(p['parent_town'])}, not a "
+            f"separate municipality. {html.escape(p['rule'])} Pole records are limited to those a "
+            f"photograph has seen since {html.escape(p['since'] or 'any date')}.</p>")
+    note = WEB / "notes" / f"{slug}.html"
+    if note.exists():
+        parts.append(note.read_text().strip())
+    return "\n".join(parts)
+
+
 def render(template, ctx):
     out = template
     for k, v in ctx.items():
@@ -444,6 +482,7 @@ def main():
         "LOCATION": meta["location"], "GENERATED": generated, "VERSION": version, "VALIDATION_NOTICE": notice, "VALIDATION_SHORT": vshort,
         "VALIDATION_SECTION": vsection, "TECH_DETAILS": tech_details(summary, coverage, method, tilt_meta, osm_meta),
         "CONTACT_NAV": contact_nav, "CONTACT_SECTION": contact_section, "ATTRIBUTION": attribution,
+        "AREA_NOTE": area_note(slug),
         "OSM_NOTE": " The OpenStreetMap comparison only says which poles OSM volunteers have mapped; it is not the utility's own records, and OSM pole coverage is sparse in most towns." if osm_meta else "",
         "BUILD": hashlib.sha1(b"".join((WEB / f).read_bytes() for f in ("style.css", "app.js", "predicates.js")) + version.encode()).hexdigest()[:8],
     })

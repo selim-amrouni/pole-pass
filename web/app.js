@@ -182,7 +182,14 @@
   function doubleEvidenceHtml(r) {
     const d = r.dbl; if (!d) return '';
     const where = [d.street, d.cross_street].filter(Boolean).join(' \u00d7 ');
-    const gap = Number.isFinite(d.separation_m) ? `${d.separation_m.toFixed(1)} m apart (estimated)` : 'gap not estimated';
+    // The gap is measured from the two detection outlines in this photo, not guessed at in metres
+    // and not taken from the map positions -- both of those read ~4 m for poles that are touching.
+    // When the outlines overlap, say so instead of printing a small number that invites false trust.
+    const gap = d.separation_overlap ? 'the two poles overlap in this photo'
+      : Number.isFinite(d.separation_m) ? `about ${d.separation_m < 1 ? d.separation_m.toFixed(1) : Math.round(d.separation_m * 10) / 10} m apart, measured from the outlines`
+      : 'gap not measurable from this photo';
+    const CONF = c => c >= 0.75 ? 'High' : c >= 0.5 ? 'Medium' : 'Low';
+    const conf = Number.isFinite(d.confidence) ? ` \u00b7 ${CONF(d.confidence)} confidence (${d.confidence.toFixed(2)})` : '';
     const cut = d.cut_short === 'yes' ? ' · one pole cut short' : '';
     const who = d.maintainer && d.maintainer !== 'UNCERTAIN' ? ` · ${esc(d.maintainer)} maintains this side (approximate)` : '';
     const link = d.url ? ` <a class="lnk" href="${esc(d.url)}" target="_blank" rel="noopener">open source photo</a>` : '';
@@ -198,7 +205,8 @@
         </div>
         <figcaption class="muted">Both poles of the pair, outlined. Photo © Mapillary contributors, CC BY-SA 4.0.${link}</figcaption>
       </figure>` : '';
-    return `<div class="ev"><span>${esc(d.reason || '')}</span><span class="muted">${esc(gap)}${cut}${esc(where ? ` · ${where}` : '')}${who} · pair ${esc(d.pair_id)}</span></div>${pic}`;
+    return `<div class="ev"><span>${esc(d.reason || '')}</span><span class="muted">${esc(gap)}${cut}${esc(where ? ` · ${where}` : '')}${who}${conf} · pair ${esc(d.pair_id)}</span>`
+      + `<span class="muted">A model's reading of one photograph, not an inspection. Nobody has been to this pole.</span></div>${pic}`;
   }
   // photo-evidence line for one flag: how many photos support it, when, and what the latest assessed photo shows
   function evidenceHtml(r, k) {
