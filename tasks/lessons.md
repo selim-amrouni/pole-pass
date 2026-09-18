@@ -160,3 +160,29 @@ number as sortable evidence and let the reviewer see the outlier -- the rejected
 pair now sits at the top of the gap column instead of vanishing. Gate only on
 what is definitional (a streetlight is not a utility pole) rather than on a
 tuned pixel heuristic.
+
+## Never hand a model the number you are asking it to estimate (2026-09-18)
+doubles.py asked the model for `separation_estimate_m`, "your best visual estimate
+of the ground distance between the two pole bases" -- and in the same prompt told
+it "the two flagged map features are about X m apart on the ground", X being the
+triangulated map distance we already knew was unreliable. The model largely handed
+X back. On the rows that actually get published, 11 of 13 estimates landed within
+0.5 m of what it was told, against 28% of the rows that were not published.
+
+So the field was never a second opinion. It was the bad number restated in a place
+that looked like corroboration, and it was the whole of the reported bug: the
+Marblehead pair whose poles visibly cross was called "4 m apart" because the map
+said 5.90 m and the model rounded it back. Two independent-looking numbers that
+were really one number.
+
+Deleting the sentence dropped the echo to 3/13 published (6/175 overall) and moved
+the estimate closer to the separation measured off the detection outlines. It also
+changed two of thirteen double/not-double calls, so the anchor had been steering
+the judgement and not merely the number.
+
+**Pattern:** when a prompt supplies context AND asks for a judgement, check whether
+the context contains the answer. If it does, the output is an echo with the
+authority of an independent read, which is worse than no field at all. Either
+withhold it and let the model answer cold, or keep it and stop pretending the
+answer is independent. The general test is cheap: correlate what you told the model
+against what it told you back, on the subset you actually publish.
