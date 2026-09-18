@@ -16,6 +16,22 @@ test('condition issue is lean moderate/severe, crossarm damaged, or vegetation t
   assert.equal(PP.hasConditionIssue(rec({ att: 5, xfmr: true })), false, 'attachments and transformers are not condition issues');
 });
 
+test('a double pole is a condition flag, and it comes from the pair not from this record\'s own fields', () => {
+  const dbl = { pair_id: 'MH-abc12345', confidence: 0.75, reason: 'old pole beside its replacement' };
+  assert.deepEqual(PP.conditionFlags(rec({ dbl })), ['double']);
+  assert.equal(PP.isDoublePole(rec({ dbl })), true);
+  // No dbl key at all means the double-pole pass never ran for this town, which is NOT the same as
+  // "checked and found none". Either way it is not a flag on this record.
+  assert.deepEqual(PP.conditionFlags(rec({})), []);
+  assert.equal(PP.isDoublePole(rec({})), false);
+  assert.equal(PP.isDoublePole(rec({ dbl: {} })), false, 'a dbl object without a pair id is not a double');
+  assert.deepEqual(PP.conditionFlags(rec({ dbl, lean: 'severe' })), ['double', 'lean']);
+  assert.equal(PP.FILTERS.double(rec({ dbl })), true);
+  assert.equal(PP.FILTERS.double(rec({})), false);
+  assert.ok(PP.reviewableFlags(rec({ dbl })).includes('double'), 'a double pole is reviewable like any other flag');
+  assert.equal(PP.flagSupport(rec({ dbl }), 'double'), null, 'no per-frame support: the evidence is the pair photo');
+});
+
 test('slight lean is a watch item, one tier below a condition issue', () => {
   assert.deepEqual(PP.warningFlags(rec({ lean: 'slight' })), ['lean_slight']);
   assert.equal(PP.hasConditionIssue(rec({ lean: 'slight' })), false);

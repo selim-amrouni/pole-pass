@@ -9,9 +9,12 @@
   const crossarmDamage = r => r.xarm === 'damaged';
   const vegetationContact = r => r.veg === 'touching';
   const transformerVisible = r => r.xfmr === true;
+  // A double pole is a property of a PAIR, decided by doubles.py from a photo showing both poles,
+  // so it arrives on the record as r.dbl rather than being derivable from this record's own fields.
+  const isDoublePole = r => !!(r.dbl && r.dbl.pair_id);
   const attachments3 = r => isUtility(r) && Number.isInteger(r.att) && r.att >= 3;
   // "Possible condition issue": any of the three condition flags. Attachments and transformers are not condition issues.
-  const conditionFlags = r => [possibleLean(r) && 'lean', crossarmDamage(r) && 'crossarm', vegetationContact(r) && 'vegetation'].filter(Boolean);
+  const conditionFlags = r => [isDoublePole(r) && 'double', possibleLean(r) && 'lean', crossarmDamage(r) && 'crossarm', vegetationContact(r) && 'vegetation'].filter(Boolean);
   const hasConditionIssue = r => conditionFlags(r).length > 0;
   // "Watch item": one tier below a condition issue. Slight lean only, for now. Mirrors warning_flags() in dedupe.py.
   const leanWarning = r => r.lean === 'slight';
@@ -126,6 +129,7 @@
     veg: vegetationContact,
     att3: attachments3,
     xfmr: transformerVisible,
+    double: isDoublePole,
   };
 
   // Population for the main workflow: utility-pole records. Other detected objects only when asked for.
@@ -180,7 +184,7 @@
     flags_desc: (a, b) => conditionFlags(b).length - conditionFlags(a).length || warningFlags(b).length - warningFlags(a).length || (b.shown.ts || 0) - (a.shown.ts || 0),
   };
 
-  return { isUtility, possibleLean, crossarmDamage, vegetationContact, transformerVisible, attachments3,
+  return { isUtility, possibleLean, crossarmDamage, vegetationContact, transformerVisible, attachments3, isDoublePole,
            conditionFlags, hasConditionIssue, leanWarning, warningFlags, hasWarning, conditionUnclear, frameYears, spansYears, notInOsm, OSM_HEADLINE_M,
            RECENT_MONTHS, monthsSince, isRecent, ageLabel, reviewableFlags, flagSupport, REVIEW_VALUES, reviewState, reviewVerdict, reviewProgress, mergeReviews,
            FILTERS, applyFilters, summary, SORTS };

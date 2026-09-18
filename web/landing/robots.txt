@@ -1,0 +1,9 @@
+# Pole Pass. Public area pages are linked from the landing page and may be indexed.
+# Unlisted territory bundles are deployed for a named operator to review before anyone
+# else sees them; they are not linked from anywhere and must not be indexed. Each one is
+# added here by deploy.sh --unlisted, and also carries <meta name="robots" content="noindex">
+# on the page itself, because robots.txt is a request and the meta tag is the stronger signal.
+User-agent: *
+Allow: /
+
+# --- unlisted (managed by deploy.sh --unlisted; do not reorder) ---

@@ -20,7 +20,8 @@ drive are correlated, so several frames are not independent assessments.
 
 Condition flag predicate (shared with web/predicates.js, keep in sync):
   lean in {moderate, severe} -> "lean"; crossarm == damaged -> "crossarm";
-  vegetation == touching -> "vegetation".
+  vegetation == touching -> "vegetation"; a feature in a confirmed double-pole
+  pair from doubles.py -> "double".
 """
 import argparse
 import json
@@ -46,15 +47,51 @@ UTILITY_TYPES = {"wood_utility", "concrete_or_steel_utility"}
 READABLE_PX = 300  # newest frame at or above this height is the displayed photo
 
 
-def condition_flags(fields):
-    """The one predicate for 'possible condition issue'. Mirrors web/predicates.js."""
+def condition_flags(fields, is_double=False):
+    """The one predicate for 'possible condition issue'. Mirrors web/predicates.js.
+
+    `is_double` comes from doubles.py rather than from this record's own frames: a double pole is a
+    property of a PAIR of poles, so it cannot be read off one record's classifications the way lean
+    or vegetation can. It is a condition flag all the same -- an old pole left standing beside its
+    replacement is the thing the utility has a deadline to clear."""
     out = []
+    if is_double:
+        out.append("double")
     if fields["lean_severity"] in ("moderate", "severe"):
         out.append("lean")
     if fields["crossarm_condition"] == "damaged":
         out.append("crossarm")
     if fields["vegetation_contact"] == "touching":
         out.append("vegetation")
+    return out
+
+
+def load_doubles(slug):
+    """feature_id -> the double-pole verdict covering it, from doubles.py. {} when that pass has not run.
+
+    Keyed by FEATURE id because that is what survives: pole ids are renumbered by every dedupe run,
+    and doubles.py deliberately pairs features rather than pole records (this module merges within
+    8 m, which would swallow the very pairs it is looking for)."""
+    path = DATA / "doubles" / slug / "candidates.jsonl"
+    if not path.exists():
+        return {}
+    out = {}
+    for line in path.open():
+        c = json.loads(line)
+        res = c.get("result") or {}
+        if not res.get("is_double_pole"):
+            continue
+        for fid in c.get("feature_ids", []):
+            prev = out.get(str(fid))
+            if prev is None or res.get("confidence", 0) > prev["confidence"]:
+                out[str(fid)] = {"pair_id": c["pair_id"], "feature_ids": [str(x) for x in c.get("feature_ids", [])],
+                                 "confidence": res.get("confidence"),
+                                 "reason": res.get("reason"), "maintainer": c.get("maintainer"),
+                                 "separation_m": res.get("separation_estimate_m"),
+                                 "cut_short": res.get("either_pole_cut_short"),
+                                 "equipment_transferred": res.get("equipment_transferred"),
+                                 "street": c.get("street"), "cross_street": c.get("cross_street"),
+                                 "crop": c.get("crop"), "url": c.get("chosen_mapillary_url")}
     return out
 
 
@@ -138,6 +175,7 @@ def main():
         if r.get("classification"):
             by_feat[r["feature_id"]].append(r)
     feat_pts = {fid: (rs[0]["lon"], rs[0]["lat"]) for fid, rs in by_feat.items()}
+    dbl = load_doubles(slug)  # {} unless doubles.py has run for this town
     cid_of = cluster(feat_pts, args.radius)
     groups = defaultdict(list)
     for fid, cid in cid_of.items():
@@ -170,12 +208,17 @@ def main():
             "shown": r is best,
         } for r in rs), key=lambda f: f["captured_at"] or 0)
         is_utility = bool(fields["pole_present"]) and fields["pole_type"] in UTILITY_TYPES
+        # The record inherits the double-pole verdict of whichever of its features carries one. A
+        # record merged from two features can legitimately BE one half of a double pair.
+        dbl_hits = [dbl[f] for f in fids if f in dbl]
+        double = max(dbl_hits, key=lambda h: h.get("confidence") or 0) if dbl_hits else None
         poles.append({
             "pole_id": f"{slug[:4]}-{cid:05d}", "lon": round(lon, 7), "lat": round(lat, 7),
             "feature_ids": sorted(fids), "n_observations": len(rs), "n_frames_available": len(every),
             "n_sequences": len({r["sequence"] for r in rs}),
             "is_utility_pole": is_utility, **fields, "votes": votes,
-            "condition_flags": condition_flags(fields),
+            "double": double,
+            "condition_flags": condition_flags(fields, is_double=bool(double)),
             "warning_flags": warning_flags(fields),
             "mean_confidence": round(sum(c["confidence"] for c in cls) / len(cls), 2),
             "best_image_id": best["image_id"], "best_crop": best.get("crop"), "best_captured_at": best.get("captured_at"),
@@ -203,6 +246,8 @@ def main():
         "other_records": len(poles) - len(util), "records_by_type": dict(Counter(p["pole_type"] for p in poles).most_common()),
         "records_merged_from_multiple_features": sum(1 for p in poles if len(p["feature_ids"]) > 1),
         "utility_with_condition_flag": sum(1 for p in util if p["condition_flags"]),
+        "utility_double_poles": sum(1 for p in util if p.get("double")),
+        "double_pairs_matched": len({p["double"]["pair_id"] for p in poles if p.get("double")}),
         "utility_flag_counts": dict(Counter(f for p in util for f in p["condition_flags"])),
         "utility_with_warning_flag": sum(1 for p in util if p["warning_flags"]),
         "utility_3plus_attachments": sum(1 for p in util if p["attachment_count"] >= 3),

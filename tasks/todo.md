@@ -1,169 +1,169 @@
-# Pole condition pass — plan
+# Marblehead MA — double-pole pass for MMLD (unlisted)
 
-Decision: candidate towns come from the Public Power Pilot Targets list, and
-coverage.py density decides among them. Picking purely on density was rejected
-because a suburban demo town is a worse opener with the munis we want to talk to.
+Goal: an unlisted Marblehead page whose primary output is candidate DOUBLE POLES
+(old pole left standing beside its replacement). ~4,000 jointly-owned poles,
+public MMLD backlog of ~100 doubles. Capture dates are evidence for the MA
+removal deadline, so dates matter as much as locations.
 
-First three candidates (Tier 1, P1 call first, Not contacted, compact territory):
-- Reading, MA (Reading Municipal Light Department, ~30k customers)
-- Groton, CT (Groton Utilities, ~32k customers)
-- Norwich, CT (Norwich Public Utilities)
+Reused, not rebuilt: `mvt.py` (tile decode), `coverage.py` (geocode, tile cache,
+`points_in_bbox`, slug/DATA), `osm.py` (Overpass fetch-once-cache-forever,
+`nearest_within` grid), `dedupe.py` (`haversine_m`, `cluster`), and for phase 2/3
+`fetch.py` / `classify.py` / `locate.py` / `tilt.py` / `report.py` unchanged at the
+core. New code is additive: `geo.py`, `split.py`, `roadcover.py`.
 
-## Steps
-- [x] Scaffold: CLAUDE.md, .gitignore, .env.example, data/, tasks/
-- [x] coverage.py (stdlib only, Nominatim geocode + Mapillary z14 vector tiles via mvt.py, cached)
-- [x] Token in .env, coverage run on Greenpoint + the three towns (2026-09-15)
-- [x] Review coverage output, pick town: iterate on Greenpoint, then Norwich CT
-- [x] /kickoff design doc at docs/design.md (GM-first, attachments + condition as co-leads, rerunnable static bundle)
-- [x] fetch.py (Graph API per id, largest-apparent-pole frame selection, 20-feature test OK, polygons verified on crops)
-- [x] Decisions: Pillow yes, Sonnet 5 via Batches, GitHub Pages, Greenpoint-only public webapp
-- [x] classify.py written (Sonnet 5, structured JSON schema, Batches API, per-detection cache, --estimate)
-- [x] Key in .env; 10 direct classifications eyeballed: severe-lean calls verified real on a visibly tilted pole
-- [x] Refetched with 3 frames: 5,175 observations; skip threshold 150px tall / 20px wide keeps 75% of features
-- [x] Full batch: 3,244/3,244 succeeded, $3.88 actual (msgbatch_01X5uhZUgAnSJYhKUk5YDdGm)
-- [x] dedupe.py (feature merge + 8 m cluster, majority vote, disagreement rate, severity score; tested on 10)
-- [x] validate.py (stratified sample CSV, precision table); grading pending full results
-- [ ] Grade 50-pole sample by hand, run --score
-- [x] report.py -> out/<slug>/ (index.html, data.js, poles.geojson, worklist.csv, crops/) rendered on test data
-- [x] run.py orchestrator
-- [x] Dedupe on full data: 865 poles, 620 utility, 183 merged from multiple features
-- [x] Report rendered on full data (29.8 MB bundle, 865 crops)
-- [ ] Open in browser, iterate on the page
-- [x] CTA contact link: report.py DEFAULT_CONTACT is mailto:selim.amrouni@gmail.com in both deployed bundles (confirmed 2026-09-16)
-- [x] GitHub repo https://github.com/selim-amrouni/pole-pass (public, MIT) + Pages at https://selim-amrouni.github.io/pole-pass/ via deploy.sh
-- [x] 16 issues filed for known problems and deferred work
-- [x] Stretch: Overpass diff vs OSM power=pole (osm.py, PR #24)
-- [x] Writeup with every number traced to data/ (docs/writeup.md)
+## Phase 0 — maintenance split  (in progress)
+- [x] Extract the hand-drawn line from the screenshot programmatically
+      (Hough + total-least-squares refit, rms 1.45 px over 2171 pixels). The town
+      outline turned out to be DASHED, not solid, which is why naive connected
+      components found nothing; the split line is the only long solid stroke.
+- [x] Georeference the screenshot -> WGS84. Fitted a 3-parameter north-up Web
+      Mercator similarity by matching OSM `natural=coastline` to the dashed town
+      outline drawn on the screenshot: scale 0.151400 px per mercator metre,
+      origin (-7892648.000, 5241316.000), 4.87 ground m/px. 79% of coastline
+      vertices land within 4 px of ink; fit degrades past +-3 px, so registration
+      is good to ~+-15 m. Cross-checked independently against 9 OSM landmarks
+      (Village School, Gerry Playground, Winter Island, Chandler Hovey, Devereux
+      Beach, Audubon Trail, two street junctions, Forest River Park) - every one
+      lands on its feature. The drawn stroke is ~68 m wide on the ground, which
+      is the real argument for the 150 m buffer.
+      Endpoints: NW -70.875462, 42.504476   SE -70.860374, 42.488828
+- [ ] Town boundary from OSM relation 2373036 at full resolution (Nominatim's
+      simplified 84-vertex polygon is too coarse; it also includes ~57 km2 of
+      water, which is the legal boundary and must be stated, not silently clipped)
+- [x] `geo.py`: point-in-polygon, densify, point-segment distance, half-plane
+      clip, line/ring intersections, Mercator + local-frame helpers. Stdlib only.
+      `osm.fetch_overpass` refactored to take a query string so it is reusable
+      as the one cache-forever Overpass fetcher. 38 python tests green.
+- [x] `split.py`: extended endpoints NW 42.508521,-70.879362 (only 552 m past
+      the drawn end - the town line meets the shore right there) and
+      SE 42.433279,-70.806813 (7.6 km out, because the legal boundary is offshore).
+      2.13 km as drawn, 10.27 km boundary to boundary. Halves 57.70 / 12.02 km2,
+      both mostly open water and NOT comparable - road centreline per half is the
+      denominator that means anything. Removed a fabricated 11.6 km2 land-area
+      constant a subagent had introduced and the "83% of each half is water" line
+      derived from it; that claim was also just wrong, the split is lopsided.
+- [x] 150 m buffer -> `maintainer = UNCERTAIN`, checked before the side test
+- [x] Overlay PNG at the screenshot's exact extent:
+      `data/split/marblehead-massachusetts/overlay.png`. Verizon side holds
+      Lafayette/Humphrey/Tedesco/Clifton, MMLD side holds Village School, Gerry,
+      the old town and the Neck - matches the Light Department's arrows.
+- [x] Note in code, GeoJSON properties and overlay footer: maintenance split
+      only; both parties jointly own all poles in town. Page copy still to do.
 
-## Page rework (spec received 2026-09-15)
-Approach: move the page out of the report.py f-string into web/ (index.html template,
-style.css, app.js, predicates.js). report.py fills the template and writes data.js with
-records + meta. Counts computed in JS from data via shared predicates, tested with node.
+## Phase 1 — coverage check, then STOP
+- [x] `coverage.py --town "Marblehead, Massachusetts"`: 21,146 images, 79
+      sequences, 11,465 map features, 2,393 utility-pole + 722 pole + 1,212
+      street-light, captures 2011-10-21 -> 2026-08-28. bbox is 131 km2 and mostly
+      ocean, so every bbox density is meaningless - hence roadcover.py.
+- [x] `roadcover.py` - all of it, plus a coverage-by-vintage cut I added because
+      it turned out to decide the project.
+- [x] VERDICT: UNUSABLE - 11.6% of in-town road centreline has an image within
+      20 m. 377 of 490 named streets have none at all.
+- [x] STOPPED and reported. No image processing, no page.
 
-- [x] dedupe.py: exact per-field votes, per-frame details (note, values), condition_flags
-      predicate replaces severity_score, latest_available_at from all frames incl. unclassified
-- [x] report.py: template fill, data.js {meta, records}, publish per-frame crops for compare,
-      no contact button when unconfigured, validation only from a real file
-- [x] web/predicates.js: shared flag predicates + summary counts (browser + node)
-- [x] web/app.js: state (filters, sort, page, selection, color mode), list, map w/ fallback,
-      detail pane (frames, compare, agreement w/ counts, review decisions in localStorage
-      keyed by dataset version, deep link #pole=), exports (filtered/all/review), mobile tabs
-- [x] web/style.css: flat, one sans (IBM Plex Sans), mono for ids/numbers, one accent, orange
-      only for possible issues, focus rings, reduced motion, 3 breakpoints
-- [x] copy: exact strings from spec; About / How it works / Technical details / Limitations /
-      Validation / Try another area; byline Selim
-- [x] initial example record chosen after viewing its image (config in report.py)
-- [x] tests: node tests for predicates + init without maplibregl
-- [x] verify: 1440 / 1024 / 390 layouts by reading rendered DOM structure, deep link, empty state
-- [x] no deploy; local preview only
+## Phase 2 — detection  (go-ahead given)
+- [x] `fetch.py --in-town` added. The bbox held 2,393 utility-pole features but only
+      1,023 are in Marblehead; without the clip we would have paid to classify ~1,370
+      Salem poles and published them on a Marblehead page. 3,069 observations, 0 errors.
+- [x] `split.town_ring` de-hardcoded: resolves the OSM relation from the Nominatim
+      answer coverage.py already cached, so it works for any territory.
+- [x] `classify.py` runner generalised to a `Job` (schema, id field, request builder)
+      so the doubles pass reuses the Batches machinery instead of growing a second one.
+      Verified byte-identical `--estimate` output on all three cached territories.
+- [x] Per-pole pipeline: classify 2,182 frames ($2.76, 0 dropped) -> dedupe 609 records
+      (582 utility, 214 with a condition flag) -> tilt --calibrate -> osm (552 of 582
+      absent from OSM at 15 m). `locate.py` deliberately skipped: it only feeds the
+      annotation overlay on the pole explorer, which is not this page's deliverable.
+- [x] `doubles.py`: pair screen on the FEATURE layer (not dedupe's pole records, which
+      merge at 8 m and would erase exactly the pairs we hunt). 372 pairs within 6 m;
+      pair ids are sha1 of the two feature ids, so they survive reruns.
+      Status: 261 ok, 57 no_shared_frame, 54 too_small — none dropped.
+- [x] Third failure mode found by inspecting crops before spending, and added to the
+      prompt (schema v2): Mapillary triangulates feature positions and depth along the
+      camera ray is poorly constrained, so two poles 20-40 m apart down the same street
+      collapse to within a metre of each other. Measured: only 15% of ok pairs have both
+      detections at the same apparent depth. The prompt now teaches the ground-line cue
+      (same depth = bases at the same height in frame) rather than pole height, because
+      an old pole cut down to a stub is genuinely short while standing right beside its
+      replacement — that is a real double and a height filter would delete it.
+- [x] Doubles classification: 261 requests, $0.835, 0 dropped.
+      75 likely duplicate detections (29%, matching the 1.2-1.4 features-per-pole prior),
+      153 poles_at_different_depths (59% — the largest single category, and it would have
+      had nowhere honest to go without schema v2), 27 called real doubles
+      (MMLD 21, Verizon 6; 9 under 1 m, 9 at 1-3 m, 9 at 3-6 m; photos 2023-08-19..2025-11-07).
+
+## Phase 3 — unlisted page
+- [x] Unlisted deploy route: `deploy.sh --unlisted <slug>` deploys the bundle without
+      adding it to territories.json and appends `Disallow: /<slug>/` to a new
+      `web/landing/robots.txt`. Verified: listed mode unchanged, and Marblehead cannot
+      be deployed as a listed page without someone editing territories.json by hand.
+- [x] `report_doubles.py` + `web/doubles.{html,js,css}` -> `out/marblehead-massachusetts/`
+      (11.3 MB; noindex meta, no address ever rendered, maintainer blank inside the 150 m
+      buffer, filters by maintainer/confidence/duplicate/depth, split line on the map,
+      browser-local review decisions exported in the CSV, attribution intact).
+      Added a Gap column the spec did not ask for: the model's visual separation estimate,
+      because the spot check found every disputed call in the widest third and a real
+      double is usually under 3 m. Shows the visual estimate, not the map separation,
+      which is unreliable for exactly the triangulation reason above.
+      Fixed two misleading lines in the generated email summary: the 111 unassessable pairs
+      were described as "awaiting classification" (they are not pending — no photo shows
+      both poles, or they are too small to read), and the per-maintainer counts printed the
+      screened-pair split (MMLD 335) directly under "27 called a real double", which invites
+      reading 335 as MMLD's double count.
+- [x] Spot-checked 4 of the 27 positives and both rejection classes by eye ->
+      `data/doubles/<slug>/spotcheck.json`, carried onto the page with its limits stated
+      first. 3 of 4 positives agreed; the one disputed call is the widest (5.44 m, wood
+      next to steel, plausibly a separate streetlight standard). Both rejection classes
+      correct. NOT a validation: same system judging its own output, n=4, not random.
 
 ## Review
-### Step 3-4 Greenpoint classification (2026-09-15, data/poles/greenpoint-brooklyn-new-york/summary.json)
-- 3,244 observations classified, $3.88, zero malformed responses (schema enforced by API)
-- 865 poles; 620 utility, 158 street lights, 35 traffic signals, 32 other, 20 unclear
-- flags among utility poles: lean severe 7, moderate 18, slight 363; crossarm damaged 1; vegetation touching 58; transformers 14
-- attachments: max 3, only 13 poles at 3+. Suspiciously low for Brooklyn; check in grading.
-- disagreement: lean 0.21, attachments 0.20, pole_type 0.09
 
-### Step 1 coverage (2026-09-15, data/coverage/*/summary.json)
-| town | km2 | images | img/km2 | utility-pole feats | last capture |
-|---|---|---|---|---|---|
-| Greenpoint, Brooklyn NY | 6.2 | 105,211 | 17,002 | 1,725 | 2026-09-09 |
-| Reading MA | 39.4 | 98,589 | 2,501 | 3,330 | 2026-06-24 |
-| Groton CT | 158.0 | 482,057 | 3,051 | 29,076 | 2026-08-23 |
-| Norwich CT | 108.5 | 378,430 | 3,489 | 19,085 | 2026-09-02 |
+### Phases 2 and 3 closed
+27 candidate doubles from 372 screened pairs, $3.60 of model spend in total. The number
+landed inside the 15-25 range predicted from the 1.35 features-per-pole prior before any
+money was spent, which is mild evidence the pipeline is behaving.
 
-Density gate: passed everywhere. Project continues.
-Lesson: Graph API bbox search silently truncates; switched to vector tiles.
+The thing that would have gone wrong quietly: the geometric screen is built on Mapillary
+feature coordinates, and those are triangulated from photographs, so depth along the camera
+ray is barely constrained. Two poles 40 m apart down one street can be recorded a metre
+apart. Looking at two crops before spending caught it; measuring all 261 sized it at 59%.
+The fix that suggested itself — filter on apparent pole height — would have been actively
+harmful, because a double pole's old member is often cut down to a stub and is therefore
+genuinely short. The ground line, not the height, is the cue that separates the two, and
+that is now what the prompt teaches.
 
-## Hook pass (spec approved 2026-09-16, branch feature/hook-demo)
-Plan: ~/.claude/plans/polymorphic-discovering-fountain.md
-- [x] A. Warning tier: slight lean = watch (amber), moderate/severe + crossarm + vegetation = issue (orange)
-- [x] B. grade.py local grading page for data/validate/<slug>/sample.csv (blind by default)
-- [x] C. tilt.py apparent tilt per photo from the detection polygon, calibration.json, per-pole chart over time
-- [x] D. "Photographed in more than one year" filter + cross-year compare (23 utility poles). fetch --years dropped: verified 0 of 1725 features have a detection year their top-3 frames miss, so no new fetch or classify was needed
-- [x] E. Issues #18 (coverage-gap layer) and #19 (GIS match) filed; README/CLAUDE.md updated
-- [x] Code-reviewer findings addressed (static exports, strict summary key, flat calibration + pano dots, y-range, keyboard dots, grade.py value/origin/json guards, python tests)
-- [~] Hand grading scrapped 2026-09-16 (user is not a pole expert; crossarm etc. too hard to label). 3 of 50 rows partially graded, not scored. Page keeps its "Experimental, not verified" notice. grade.py stays for a future expert grader
-- [ ] User reviews the local page, then PR feature/hook-demo -> main and ./deploy.sh
+Still owed before anyone acts on this: a real graded sample. validate.py/grade.py have
+never been pointed at the double-pole schema, and 4 crops judged by the author is not a
+precision table. That is the single biggest gap in the deliverable and the page says so.
 
-### Hook pass review (2026-09-16)
-- Warning tier: 363 of 620 utility poles are watch items (slight lean); 83 have a condition issue. Unchanged counts, new split.
-- Tilt calibration (data/tilt/greenpoint-brooklyn-new-york/calibration.json): abs degrees from vertical by model lean call, all photos:
-  none median 2.7 / p90 9.1 (n=1153); slight 4.5 / 12.1; moderate 8.4 / 15.0; severe 9.2 / 16.0. Panos are noisier than flat photos.
-- Multi-year records: 23 utility poles have assessed photos in 2+ distinct years (max 2 years each, spans 1 to 8 years). None in 3+.
-- No API calls made in this pass. Classifier batch: none.
+### Phase 0 closed
+The georeference is the part that had to be right, and it is checked twice: a
+coastline fit (79% of vertices within 4 px of the drawn outline) and an
+independent landmark check (9 OSM features, every one lands on its label). The
+150 m buffer is not a hedge - the drawn stroke is ~68 m wide on the ground and
+registration is +-15 m, so the buffer is about twice the width of the mark being
+interpreted.
 
-## Second territory: Hardwick, Vermont (chosen 2026-09-16)
-Coverage of five rural candidates (data/coverage/*/summary.json): Hardwick 2,718 utility-pole
-features, 71,371 images, 391/km2, photos 2013 to 2022 (8 years); Boonville 378 feats at 9 img/km2;
-Chester MA 225; Lake Placid 117; Tupper Lake 119. Hardwick picked; newest photos 2022 is the caveat.
-- [x] Territory selector in the header + city/backcountry tag, deploy.sh multi-bundle (branch feature/territories)
-- [x] run.py Hardwick: fetch 8,137 photos (2.6 GB), classify 5,357 in 3 batches $5.56, locate 3 batches $6.15, 0 dropped; tilt calibrated; report 222 MB
-- [x] Hardwick page reviewed (outline multi-ring bug found and fixed), both territories deployed
-- [x] Merge feature/territories
+Two corrections worth remembering:
+- A subagent introduced `TOWN_LAND_AREA_KM2 = 11.6` from outside knowledge and
+  derived a water fraction from it. Caught in review, removed. See tasks/lessons.md.
+- The `town_ring` / `boundary_ring` name mismatch between two concurrently
+  written modules cost a run. Publish the contract before parallelising.
 
-### Hardwick review (2026-09-16, data/poles/hardwick-vermont/summary.json, data/tilt/hardwick-vermont/calibration.json)
-- 1,672 records, 1,534 utility. Flags: vegetation 432, lean 35, crossarm 1; watch (slight lean) 777; transformer 61; 3+ attachments 0.
-- 444 utility poles photographed in 3+ distinct years (VTrans highway videolog, 2013 to 2022, every two years).
-- Tilt calibration, flat photos: none median 1.9 / p90 5.2 (n=2,182); slight 3.8; moderate 7.1; severe 31.3 (n=42). Cleaner than Greenpoint (highway camera, no panos).
-- Vegetation "touching" in the woods means canopy overlap in the photo; copy now says so.
-- Severe lean: 3 records; hard-00011 is a push brace (issue #22). The other two need a look.
-- Total API spend for Hardwick: $11.71.
+### Phase 1 closed - the answer is no, and the reason is not the one expected
+Marblehead has 177.2 km of public road centreline and 8,698 in-town images, but
+they are ~25 drives, not a sweep. 11.6% of centreline has an image within 20 m.
 
-## Third pass (plan approved 2026-09-16): OSM diff, push brace, landing page, Reading MA, writeup
-Plan: ~/.claude/plans/resilient-roaming-stallman.md. Four branches, PR each into main.
-- [x] 1. fix/push-brace (PR #23): push_brace pole_type (schema 2), classify --redo-lean moderate,severe in direct mode for both territories, dedupe tie order, page copy, test; close #22 with before/after severe counts
-- [x] 2. feature/osm-diff (PR #24): osm.py (Overpass power=pole + man_made=utility_pole, cached under data/osm/<slug>/), nearest-OSM-node per utility record, page filter "Not in OpenStreetMap", exports column, attribution; close #13
-- [x] 3. feature/landing (PR #25): web/landing/ root page fed by territories.json with per-bundle summary.json stats, deploy.sh copies it, suburb kind, About copy templated by location
-- [x] 4. feature/reading (PR #26): run.py end to end, Reading MA run ($14.87), reviewed, all three deployed 2026-09-17 with the landing page (gh-pages 988 MB)
-- [x] 5. docs/writeup.md, every number with its data/ path (precision still ungraded; the writeup says so)
+The stale-imagery worry was real but pointed the wrong way. The bbox pass showed
+75% of images predating 2024, which looked fatal. Clipping to the actual town
+polygon showed that every one of those 9,112 photos from 2017-2018 is in a
+~850 m strip at lon -70.899..-70.889 - Salem, west of the town line. Marblehead's
+OWN imagery starts 2023-08-19. Nothing in town is older than that.
 
-### Push-brace rerun, Hardwick (2026-09-17, data/poles/hardwick-vermont/summary.json, logs/hardwick-redo-lean.log)
-- 255 photos resent (all moderate/severe first-pass calls), 0 dropped, $0.58 direct (costs.py: classify current direct).
-- Utility records 1,534 -> 1,532; lean flags 35 -> 26; severe utility records 3 -> 2, and they are different poles:
-  hard-00180 (9 photos, 4 severe, marker tape on the pole, outline tilt to 10 deg: real) and hard-01250 (two poles leaning on each other, maybe decommissioned: worth a look).
-- The three former severe records: hard-01160 is now push_brace; hard-00011 and hard-01066 are wood_utility with lean unclear (the model was told not to read the brace as a lean), so no flag.
-- push_brace records: 2 (hard-00589, hard-01160). Tie between push_brace and wood_utility resolves to push_brace (TIE_ORDER, conservative).
-- Tilt calibration, flat: none median 1.9 / p90 5.3 (n=2,189, unchanged); severe median 9.8 / p90 17.0 (n=18, was 31.3 / n=42 with the braces).
+The real blocker is different and worse for the stated goal: the Verizon half has
+**zero** imagery after 2023. All 2,955 fresh (Nov 2025) photos are on the MMLD
+side. So the one comparison the Light Department would most want - how do the two
+maintainers' backlogs compare - cannot be made on current evidence at all.
 
-### Push-brace rerun, Greenpoint (2026-09-17, data/poles/greenpoint-brooklyn-new-york/summary.json, logs/greenpoint-redo-lean.log)
-- 240 photos resent, 0 dropped, $0.64 direct. No push braces found (city). Utility records 620 -> 619 (gree-00362 is now a street light).
-- Lean flags 25 -> 17; records with any issue 83 -> 76; watch items 363 -> 373 (some moderate calls became slight on the resend, model variance).
-- Severe utility records 8 -> 10: seven of the eight stayed severe, gree-00362 left as a street light, and gree-00001 (14 photos, 6 severe, outline tilt to 12 deg), gree-00024, gree-00222 (1 photo, 18.6 deg) joined.
-  The severe set is not stable frame to frame; the flag is a reason to look, not a finding, and the page says so.
-- Tilt calibration, flat: none median 2.4 / p90 7.9 (n=759); severe median 8.9 / p90 13.3 (n=40).
-- Both territories: OSM has 0 pole nodes in the Greenpoint bbox and 134 in Hardwick's, none within 15 m of a detected pole (data/osm/<slug>/summary.json).
-
-### Reading, Massachusetts (2026-09-17, data/poles/reading-massachusetts/summary.json, logs/reading-run2.log)
-- Fetch 9,987 photos (3,330 features, 3 frames), 4,057 skipped as too small; 5,923 distinct detections classified in 3 batches ($7.01), located in 3 batches ($7.87), 0 dropped. Total $14.87 (costs.py).
-- 1,519 records, 1,380 utility. Flags: vegetation 431, lean 31, crossarm 0; watch 403; transformer 47; 3+ attachments 9; no push braces. 83 poles photographed in 2+ years.
-- Severe lean 6 (read-00075, 00700, 00707, 00979, 01073, 01234), outline tilts 6 to 12 deg, notes consistent; read-01073 "broken with wires holding it up".
-- Tilt calibration, flat: none median 2.2 / p90 5.5 (n=698); severe 11.0 / p90 16.1 (n=15).
-- OSM: 189 pole nodes in the bbox (164 power=pole, 25 man_made=utility_pole); 96 of 1,380 detected poles have one within 15 m; 1,284 absent.
-- Example record read-00070 chosen after viewing the crop (whole pole, crossarm, streetlight arm, comm lines, terminal box, no flags).
-- Batch API rejected chunk 2 for duplicate custom_ids (7 detections shared by two features); fixed, lesson recorded. First chunk resumed with --resume.
-
-### Merge check and complete linkage (2026-09-17, data/validate/reading-massachusetts/merges.csv)
-- merge_check.py page; user graded 30 merged Reading records: 22 same, 7 different, 1 unsure -> 24% over-merge (user unsure of some verdicts).
-  Wrong merges: none under 3.5 m; 5 of 15 two-feature merges at 4 to 8 m (opposite sides of a street); chains of 6 to 9 features spanning 25 to 32 m wrong or unsure 3 of 5.
-- Photo-overlap rule tested (outline x-offset in shared photos, 4 m fallback): 22/29 agreement, catches 6/7 over-merges but splits 6 "same" and would add 329 records to Reading. Not adopted (user: no to a second grading round).
-- Shipped: dedupe.py cluster() is complete linkage at 8 m (every pair within radius, closest pairs first). Records 865/1,672/1,519 -> 962/1,731/1,739; utility 619/1,532/1,380 -> 706/1,591/1,589. Severe-lean counts unchanged (10/2/6).
-- Issue #5 stays open for the 4 to 8 m street-side case.
-
-## UI review pass (brief received 2026-09-17, branch feature/ui-review, no deploy without authorization)
-Plan: ~/.claude/plans/resilient-roaming-stallman.md
-- [x] 1. Homepage: result first (hero read-00070 with model markers, area cards with photo + freshness, brief's copy); report.py summary.json gains example + shown_by_month
-- [x] 2. App header/toolbar/workspace: one summary line, grouped filters, More filters, active-filter line, no page scroll, About dialog
-- [x] 3. Detail pane: photo + date + age first, "Why this record is listed" with dated support, review, attributes, collapsed technical
-- [x] 4. Freshness: 24-month recent, age labels, representative date documented
-- [x] 5. Review: All/Unreviewed/Reviewed, progress, next unreviewed, review columns in exports, JSON import with conflict preview
-- [x] 6. Map: load/WebGL/tile failure states, retry without duplicate instances, list reclaims space
-- [x] 7. Copy, 8. accessibility, 9. deferred items documented
-- [x] Tests (39 node, 20 python), report rebuild from cache, dry-run deploy, screenshots at 1440/1280/768/390 (390 and 768 via iframes: headless Chrome will not open a window under about 500 px), code review, PR (not merged, not deployed)
-
-### UI review pass, results (2026-09-17, branch feature/ui-review)
-- Found while rebuilding: out/<slug>/crops/<pole_id>.jpg were stale after the complete-linkage change (ids renumbered; resized() skips existing files), so list thumbnails and card photos showed the wrong pole. The deployed site has had this since PR #28. Crops are now named by detection id and pruned; the example record is keyed by detection id too. Needs a deploy to fix live.
-- Map failure from the brief not reproduced: unpkg, OSM tiles, and WebGL all load in a fresh headless Chrome. Added detection of a blocked library / no WebGL / construction error / tile errors, one retry that re-injects the script without a second map instance, and a failed state where the list takes the workspace.
-- Reviewed/partial/unreviewed semantics, 24-month freshness, per-flag dated support, review columns in exports, JSON import with conflict preview, About dialog, landing hero and cards: all covered by node tests against the built Greenpoint bundle.
-- Not done, by design: no geocoded street names (none in the data), no "resolved" status, no validation numbers.
+Cross-check that the road denominator is sane: 177 km of centreline against ~4,000
+poles is ~44 m per pole, which is normal distribution spacing. The number is right.

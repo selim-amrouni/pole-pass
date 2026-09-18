@@ -26,7 +26,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from statistics import median
 
+import geo
 import mvt
+import split
 from coverage import DATA, ROOT, load_env, slugify
 
 GRAPH = "https://graph.mapillary.com"
@@ -143,6 +145,10 @@ def main():
     ap.add_argument("--values", nargs="+", default=DEFAULT_VALUES, help="map feature object values to include")
     ap.add_argument("--frames", type=int, default=2, help="frames per feature, largest apparent pole first")
     ap.add_argument("--limit", type=int, help="only the first N features (iteration)")
+    ap.add_argument("--in-town", action="store_true",
+                    help="keep only features inside the town boundary polygon. coverage.py enumerates a BBOX, which for "
+                         "a coastal town reaches into its neighbours; without this every downstream classification pays "
+                         "for poles in the next town over and they land on this town's page")
     ap.add_argument("--workers", type=int, default=8)
     args = ap.parse_args()
 
@@ -153,6 +159,12 @@ def main():
         sys.exit(f"run coverage.py first, missing {src}")
     feats = [json.loads(l) for l in src.open()]
     feats = [f for f in feats if f["value"] in args.values]
+    if args.in_town:
+        ring = split.town_ring(slug)
+        before = len(feats)
+        feats = [f for f in feats if geo.point_in_polygon(f["lon"], f["lat"], [ring])]
+        print(f"{slug}: {before} features in the bbox -> {len(feats)} inside the town boundary "
+              f"({before - len(feats)} dropped as out of town)")
     feats.sort(key=lambda f: f["id"])  # deterministic order so --limit is stable
     if args.limit:
         feats = feats[:args.limit]

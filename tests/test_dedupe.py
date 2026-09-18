@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dedupe import cluster  # noqa: E402
+from dedupe import cluster, condition_flags  # noqa: E402
 
 LON, LAT = -71.10, 42.52
 M = 1 / 111_320  # degrees of latitude per meter
@@ -42,3 +42,18 @@ class ClusterTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConditionFlagTest(unittest.TestCase):
+    """Mirrors tests/predicates.test.js. The two implementations must agree."""
+
+    CLEAN = {"lean_severity": "none", "crossarm_condition": "intact", "vegetation_contact": "none"}
+
+    def test_double_is_a_condition_flag_and_comes_from_outside_this_record(self):
+        self.assertEqual(condition_flags(self.CLEAN), [])
+        self.assertEqual(condition_flags(self.CLEAN, is_double=True), ["double"])
+
+    def test_double_combines_with_the_frame_derived_flags_in_a_stable_order(self):
+        fields = {**self.CLEAN, "lean_severity": "severe", "vegetation_contact": "touching"}
+        self.assertEqual(condition_flags(fields, is_double=True), ["double", "lean", "vegetation"])
+        self.assertEqual(condition_flags(fields), ["lean", "vegetation"])

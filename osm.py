@@ -43,11 +43,14 @@ def overpass_query(bbox):
     return f'[out:json][timeout:180];(node["power"="pole"]{box};node["man_made"="utility_pole"]{box};);out body;'
 
 
-def fetch_overpass(bbox, path):
-    """Raw Overpass response for the bbox, from cache when the file exists. Exits on a bad response; writes nothing then."""
+def fetch_overpass(query, path):
+    """Raw Overpass response for an Overpass QL query string, from cache when the file exists.
+
+    Exits on a bad response; writes nothing then. Takes the query itself (not a bbox) so other
+    modules can reuse this cache-forever-on-disk fetcher with their own Overpass QL."""
     if path.exists():
         return json.loads(path.read_text())
-    body = urllib.parse.urlencode({"data": overpass_query(bbox)}).encode()
+    body = urllib.parse.urlencode({"data": query}).encode()
     req = urllib.request.Request(OVERPASS, data=body, headers={"User-Agent": USER_AGENT})
     for attempt in range(4):
         try:
@@ -67,7 +70,7 @@ def fetch_overpass(bbox, path):
     if "elements" not in raw:
         sys.exit(f"unexpected Overpass response: {json.dumps(raw)[:300]}")
     raw["_fetched_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    raw["_query"] = overpass_query(bbox)
+    raw["_query"] = query
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(raw))
     return raw
@@ -144,7 +147,7 @@ def main():
             sys.exit(f"missing {p}; run coverage.py and dedupe.py first")
     bbox = json.load(cov_path.open())["bbox"]
     out_dir = DATA / "osm" / slug
-    raw = fetch_overpass(bbox, out_dir / "overpass.json")
+    raw = fetch_overpass(overpass_query(bbox), out_dir / "overpass.json")
     nodes = osm_nodes(raw)
     poles = [(r["pole_id"], r["lon"], r["lat"]) for r in map(json.loads, poles_path.open()) if r.get("is_utility_pole")]
     matches, summary = diff(poles, nodes)
