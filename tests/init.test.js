@@ -8,7 +8,7 @@ const { makeDocument, El } = require('./fakedom.js');
 
 const OUT = path.join(__dirname, '..', 'out', 'greenpoint-brooklyn-new-york');
 const IDS = ['summary', 'dates-label|span', 'territory|select', 'loc-name|span', 'kind|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|input', 'other|input', 'years|input', 'years-n|span', 'osm-wrap|label', 'osm|input', 'osm-n|span', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'imp-review|button', 'imp-file|input', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'map-state', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img',
-  'map-notice', 'chips-eq', 'chips-more', 'g-issues', 'g-equip', 'g-review', 'review-seg|span', 'review-n|span', 'recent-n|span', 'more-btn|button', 'more-menu', 'more-fold', 'active', 'import-dlg|dialog', 'import-body', 'import-close|button', 'about-dlg|dialog', 'about-close|button',
+  'map-notice', 'chips-eq', 'chips-more', 'g-issues|div|filters', 'g-equip|div|filters', 'g-review|div|filters', 'review-seg|span', 'review-n|span', 'recent-n|span', 'more-btn|button', 'more-menu', 'more-fold', 'active', 'import-dlg|dialog', 'import-body', 'import-close|button', 'about-dlg|dialog', 'about-close|button',
   'notice-btn|button', 'filters', 'more-n|span', 'more-done|button', 'list-rail|button', 'about-counts'];
 
 function boot(hash = '', width = 1440, extra = {}) {
@@ -318,4 +318,18 @@ test('history entries that change only the issue repaint the open record', () =>
   assert.equal(PP.state.flag, 'all');
   assert.doesNotMatch(document.querySelector('.primary .ctx').textContent, /Shown for/);
   assert.equal(document.querySelector('.primary .ctx').textContent, 'Primary finding');
+});
+
+test('unfolding restores the filter groups in their markup order, not the order they were folded in', () => {
+  // The fold order is review-then-equipment; re-appending in that order put Review before
+  // Equipment once both had been folded. The restore position comes from the markup instead.
+  // 1600 is wide enough that the width fallback used by the test DOM unfolds both groups again.
+  const { document, PP } = boot('', 1600);
+  const filters = document.getElementById('filters'), fold = document.getElementById('more-fold');
+  const ids = el => el.children.map(c => c.id).filter(Boolean);
+  assert.deepEqual(ids(filters), ['g-issues', 'g-equip', 'g-review'], 'markup order');
+  ['g-review', 'g-equip'].forEach(id => fold.appendChild(document.getElementById(id)));
+  assert.deepEqual(ids(filters), ['g-issues']);
+  PP.state.sizeWs();   // re-runs foldToolbar, which unfolds whatever now fits
+  assert.deepEqual(ids(filters), ['g-issues', 'g-equip', 'g-review']);
 });

@@ -6,6 +6,16 @@ class El {
     this.classList = { add: (...c) => c.forEach(x => this._cls().add(x)), remove: (...c) => c.forEach(x => this._cls().delete(x)), toggle: (c, f) => f === undefined ? (this._cls().has(c) ? this._cls().delete(c) : this._cls().add(c)) : (f ? this._cls().add(c) : this._cls().delete(c)), contains: c => this._cls().has(c) };
   }
   _cls() { if (!this._set) this._set = new Set(); return this._set; }
+  // app.js moves filter groups between the toolbar and the "More filters" popover, so the stand-in
+  // has to model reparenting: expose parentNode, and detach from the old parent on insert.
+  get parentNode() { return this.parent; }
+  _detach(c) { if (c.parent) c.parent.children = c.parent.children.filter(x => x !== c); }
+  insertBefore(c, ref) {
+    this._detach(c); c.parent = this;
+    const i = ref ? this.children.indexOf(ref) : -1;
+    if (i < 0) this.children.push(c); else this.children.splice(i, 0, c);
+    return c;
+  }
   get innerHTML() { return this._html; }
   set innerHTML(h) { this._html = h; this.children = parse(h, this); }
   insertAdjacentHTML(where, h) { const kids = parse(h, this.parent || this); if (where === 'afterend' && this.parent) { const i = this.parent.children.indexOf(this); this.parent.children.splice(i + 1, 0, ...kids); } else this.children.push(...kids); }
@@ -16,7 +26,7 @@ class El {
   click() { this.dispatch('click'); }
   focus() { active = this; }
   scrollIntoView() {}
-  appendChild(c) { c.parent = this; this.children.push(c); return c; }
+  appendChild(c) { this._detach(c); c.parent = this; this.children.push(c); return c; }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(c => c !== this); }
   closest(sel) { const parts = sel.split(',').map(x => x.trim()); let n = this; while (n) { if (n instanceof El && parts.some(p => matches(n, p))) return n; n = n.parent; } return null; }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
@@ -49,9 +59,14 @@ function parse(html, parent) {
   }
   return out;
 }
+// ids are "<id>", "<id>|<tag>" or "<id>|<tag>|<parentId>". Most elements are flat siblings of body,
+// which is enough for getElementById; the toolbar's filter groups declare their parent because
+// app.js moves them in and out of the "More filters" popover and their order there is meaningful.
 function makeDocument(ids) {
   const root = new El('body');
-  ids.forEach(([id, tag]) => { const e = new El(tag || 'div', id); root.appendChild(e); });
+  const made = {};
+  ids.forEach(([id, tag]) => { const e = new El(tag || 'div', id); made[id] = e; root.appendChild(e); });
+  ids.forEach(([id, , parentId]) => { if (parentId && made[parentId]) made[parentId].appendChild(made[id]); });
   const doc = {
     body: root, get activeElement() { return active; },
     getElementById: id => root.querySelectorAll('#' + id)[0] || (root.children.find(c => c.id === id) || null),

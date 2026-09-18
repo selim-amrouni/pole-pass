@@ -676,14 +676,17 @@
   // one group at a time until the toolbar's single row actually fits. The tools block (dates, more,
   // sort, export) is never folded and never clips, and .filters can still wrap as a last resort.
   const FOLDABLE = ['g-review', 'g-equip'];
+  // Where each group belongs when it comes back, read from the markup at startup rather than
+  // restated here: a hand-written list drifts from index.html and silently reorders the toolbar.
+  const GROUP_ORDER = (() => { const f = document.getElementById('filters'); return f ? [...f.children].map(g => g.id).filter(Boolean) : []; })();
   function foldToolbar() {
     const fold = $('more-fold'), filters = $('filters'), bar = $('toolbar');
     if (!fold || !filters || !bar) return;
     // Re-insert in the group's original position; appending reversed Equipment and Review.
-    const order = ['g-issues', ...FOLDABLE];
     const unfold = g => {
       if (g.parentNode !== fold) return;
-      const after = order.slice(order.indexOf(g.id) + 1).map($).find(x => x && x.parentNode === filters);
+      const i = GROUP_ORDER.indexOf(g.id);
+      const after = i < 0 ? null : GROUP_ORDER.slice(i + 1).map($).find(x => x && x.parentNode === filters);
       filters.insertBefore(g, after || null);
     };
     const put = g => { if (g.parentNode !== fold) fold.appendChild(g); };
