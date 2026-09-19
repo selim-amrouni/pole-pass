@@ -23,6 +23,18 @@
   const attLabel = r => !PP.isUtility(r) ? 'Attachments not assessed' : Number.isInteger(r.att) ? `${r.att} estimated attachment${r.att === 1 ? '' : 's'}` : 'Attachments: cannot tell';
   const xfmrLabel = r => r.xfmr === true ? 'Transformer visible' : 'No transformer visible';
   const dateLabel = d => d && d.date ? d.date : 'Date unknown';
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  // "November 2025" for the inspector; dense result rows keep the compact "2025-11".
+  const longDate = d => { const t = d && d.date ? /^(\d{4})-(\d{2})$/.exec(d.date) : null; return t ? `${MONTHS[+t[2] - 1]} ${t[1]}` : dateLabel(d); };
+  // Where the pole is, in words. An intersection when the double-pole pass named one, else the
+  // nearest named road from the cached OSM geometry. Both are proximity inferences, never an
+  // address, so the nearest-road form says "near". Null when the data supports nothing.
+  function placeLabel(r) {
+    const d = r.dbl || {};
+    if (d.street && d.cross_street) return `${d.street} \u00d7 ${d.cross_street}`;
+    if (d.street) return d.street;
+    return r.st ? `near ${r.st}` : null;
+  }
   const flagCls = k => k === 'att3' ? 'att' : k === 'xfmr' ? 'neutral' : k === 'lean_slight' ? 'warn' : 'issue';
   // Label for one flag on one record. Every key needs a branch: this used to end in a bare
   // xfmrLabel(r) fallback, so 'double' fell through it and every double-pole record led with the
@@ -36,7 +48,10 @@
     : (L.flag[k] || k);
 
   // ---------- state ----------
-  const state = { flag: 'all', yearMin: null, yearMax: null, recent: false, review: 'all', other: false, years: false, osm: false, sort: 'date_desc', page: 1,
+  // First visit to an area opens on the poles that have a condition issue; All poles is one chip
+  // away. A URL that already carries state (a shared record or issue) always wins over this.
+  const DEFAULT_FLAG = 'any';
+  const state = { flag: 'all', q: '', yearMin: null, yearMax: null, recent: false, review: 'all', other: false, years: false, osm: false, sort: 'date_desc', page: 1,
     selected: null, viewing: null, compare: false, colorMode: 'condition', tab: 'list', example: false, outline: true, markers: true, badges: true, now: Date.now(), reviews: null, listOpen: true };
   const PAGE = 20;
   const byId = Object.fromEntries(D.records.map(r => [r.id, r]));
@@ -78,10 +93,10 @@
   }
 
   // ---------- filters ----------
-  const CHIPS = { chips: [['all', 'All poles', ''], ['double', 'Double pole', 'issue'], ['lean', 'Lean', 'issue'], ['xarm', 'Crossarm', 'issue'], ['veg', 'Vegetation', 'issue']],
+  const CHIPS = { chips: [['all', 'All poles', ''], ['any', 'Any issue', 'issue'], ['double', 'Double pole', 'issue'], ['lean', 'Lean', 'issue'], ['xarm', 'Crossarm', 'issue'], ['veg', 'Vegetation', 'issue']],
                   'chips-eq': [['att3', '3+ attachments', 'att'], ['xfmr', 'Transformer', 'neutral']],
                   'chips-more': [['lean_slight', 'Slight lean (watch item)', 'warn']] };
-  const FLAG_LABEL = { all: 'All poles', double: 'Possible double pole (old pole left beside its replacement)', lean: 'Possible lean', xarm: 'Possible crossarm damage', veg: 'Possible vegetation contact', att3: '3+ attachments', xfmr: 'Transformer visible', lean_slight: 'Slight lean (watch item)' };
+  const FLAG_LABEL = { all: 'All poles', any: 'Any issue (double pole, lean, crossarm, or vegetation)', double: 'Possible double pole (old pole left beside its replacement)', lean: 'Possible lean', xarm: 'Possible crossarm damage', veg: 'Possible vegetation contact', att3: '3+ attachments', xfmr: 'Transformer visible', lean_slight: 'Slight lean (watch item)' };
   function renderChips() {
     const base = D.records.filter(r => state.other ? !PP.isUtility(r) : PP.isUtility(r));
     Object.entries(CHIPS).forEach(([id, list]) => { $(id).innerHTML = list.map(([k, label, cls]) => `<button class="chip ${cls}" data-f="${k}" aria-pressed="${state.flag === k}" title="${esc(FLAG_LABEL[k])}">${esc(label)}<span class="n">${base.filter(PP.FILTERS[k]).length}</span></button>`).join(''); });
@@ -110,8 +125,9 @@
     $('dates-label').textContent = state.recent ? `last ${PP.RECENT_MONTHS} mo` : state.yearMin == null && state.yearMax == null ? `${Y0 ?? '?'}–${Y1 ?? '?'}` : `${state.yearMin ?? Y0}–${state.yearMax ?? Y1}`;
   }
   function resetFilters() {
-    Object.assign(state, { flag: 'all', yearMin: null, yearMax: null, recent: false, review: 'all', other: false, years: false, osm: false, page: 1 });
+    Object.assign(state, { flag: 'all', q: '', yearMin: null, yearMax: null, recent: false, review: 'all', other: false, years: false, osm: false, page: 1 });
     $('year-min').value = Y0 ?? ''; $('year-max').value = Y1 ?? ''; ['recent', 'other', 'years', 'osm'].forEach(id => { $(id).checked = false; });
+    $('q').value = ''; $('q-clear').hidden = true;
     readYearInputs(); refresh();
   }
   function activeFilters() {
@@ -123,6 +139,7 @@
     if (state.years) out.push('photographed in 2+ years');
     if (state.osm) out.push('no OSM pole within 15 m');
     if (state.other) out.push('other detected objects');
+    if (state.q) out.push(`matching "${state.q}"`);
     return out;
   }
 
@@ -139,7 +156,7 @@
   const ROW_CHIPS = 2;
   function flagChips(r) {
     const ordered = PP.orderFlags(r, state.flag);
-    if (!ordered.length) return `<span class="flag dim">${PP.conditionUnclear(r) ? 'Cannot tell from photos' : 'No flagged condition'}</span>`;
+    if (!ordered.length) return `<span class="flag dim">${PP.conditionUnclear(r) ? 'Cannot tell from photos' : 'No condition flagged'}</span>`;
     const shown = ordered.slice(0, ROW_CHIPS).map(k => `<span class="flag ${flagCls(k)}">${esc(L.flag[k])}</span>`);
     const rest = ordered.length - shown.length;
     if (rest) shown.push(`<span class="plus" title="${esc(ordered.slice(ROW_CHIPS).map(k => L.flag[k]).join(', '))}">+${rest}</span>`);
@@ -176,6 +193,7 @@
     const parts = [];
     if (id) parts.push(`pole=${encodeURIComponent(id)}`);
     if (flag && flag !== 'all') parts.push(`issue=${encodeURIComponent(flag)}`);
+    if (state.q) parts.push(`q=${encodeURIComponent(state.q)}`);
     return parts.length ? '#' + parts.join('&') : '';
   }
   const shareUrl = () => location.origin + location.pathname + location.search + hashFor(state.selected, state.flag);
@@ -186,15 +204,18 @@
   }
   function parseHash() {
     const h = location.hash || '';
-    const p = /[#&]pole=([^&]*)/.exec(h), i = /[#&]issue=([^&]*)/.exec(h);
+    const p = /[#&]pole=([^&]*)/.exec(h), i = /[#&]issue=([^&]*)/.exec(h), q = /[#&]q=([^&]*)/.exec(h);
     const issue = i ? decodeURIComponent(i[1]) : null;
-    return { pole: p ? decodeURIComponent(p[1]) : null, issue: issue && PP.FILTERS[issue] ? issue : null };
+    return { pole: p ? decodeURIComponent(p[1]) : null, issue: issue && PP.FILTERS[issue] ? issue : null,
+             q: q ? decodeURIComponent(q[1]) : '' };
   }
   // Back and forward move between application states rather than leaving the page.
   function syncFromHash() {
     const h = parseHash();
     const flag = h.issue || 'all';
-    if (flag !== state.flag) { state.flag = flag; refresh(true); }
+    const qChanged = h.q !== state.q;
+    if (qChanged) { state.q = h.q; $('q').value = h.q; $('q-clear').hidden = !h.q; }
+    if (flag !== state.flag || qChanged) { state.flag = flag; refresh(true); }
     if (h.pole && h.pole !== state.selected) select(h.pole, { silent: true, focus: false });
     else if (!h.pole && state.selected) close(false, true);
     // The lead finding is derived from state.flag, so a history entry that changes only the issue
@@ -288,13 +309,15 @@
     // The gap is measured from the two detection outlines in this photo, not guessed at in metres
     // and not taken from the map positions -- both of those read ~4 m for poles that are touching.
     // When the outlines overlap, say so instead of printing a small number that invites false trust.
-    const gap = d.separation_overlap ? 'the two poles overlap in this photo'
+    const gap = d.separation_overlap ? 'Two pole structures appear beside each other; their outlines overlap in this photo, so the gap cannot be measured'
       : Number.isFinite(d.separation_m) ? `about ${d.separation_m < 1 ? d.separation_m.toFixed(1) : Math.round(d.separation_m * 10) / 10} m apart, measured from the outlines`
       : 'gap not measurable from this photo';
     const CONF = c => c >= 0.75 ? 'High' : c >= 0.5 ? 'Medium' : 'Low';
     const conf = Number.isFinite(d.confidence) ? ` \u00b7 ${CONF(d.confidence)} confidence (${d.confidence.toFixed(2)})` : '';
     const cut = d.cut_short === 'yes' ? ' · one pole cut short' : '';
-    const who = d.maintainer && d.maintainer !== 'UNCERTAIN' ? ` · ${esc(d.maintainer)} maintains this side (approximate)` : '';
+    // The split line says which service territory the pole falls in. It does not say who owns
+    // the pole or who maintains it -- that is not public -- so this claims only what it supports.
+    const who = d.maintainer && d.maintainer !== 'UNCERTAIN' ? ` · within ${esc(d.maintainer)} service territory (approximate)` : '';
     const link = d.url ? ` <a class="lnk" href="${esc(d.url)}" target="_blank" rel="noopener">open source photo</a>` : '';
     // The claim is about TWO poles, so show the frame that contains both with both of them outlined.
     // One outlined pole would prove nothing about a pair.
@@ -396,24 +419,25 @@
     const yrs = PP.frameYears(r);
     const strip = r.frames.length > 1 ? `<div class="strip"><span class="lbl">${r.frames.length} photos<br>${yrs.length > 1 ? `${yrs[0]}–${yrs[yrs.length - 1]}` : `${r.seq} drive${r.seq === 1 ? '' : 's'}`}</span>
         <div class="thumbs">${r.frames.map((x, i) => `<button data-i="${i}" aria-pressed="${i === state.viewing}" aria-label="View photo from ${esc(dateLabel(x))}">${x.img ? `<img src="${esc(x.img)}" alt="">` : `<span class="ph"></span>`}<span class="c">${esc(x.date || '?')}</span></button>`).join('')}</div>
-        <button class="btn sm cmp" id="cmp" aria-pressed="${state.compare}">Compare</button></div>${state.compare ? compareHtml(r) : ''}` : '';
+        <button class="btn sm bd cmp" id="cmp" aria-pressed="${state.compare}" ${r.frames.filter(x => x.img).length > 1 ? '' : 'disabled title="Only one of these photos has an in-app image"'}>Compare</button></div>${state.compare ? compareHtml(r) : ''}` : '';
     const latest = r.latest && r.latest.ts && (!f || r.latest.ts > (f.ts || 0)) ? `<a href="${esc(r.latest.url)}" target="_blank" rel="noopener">Latest available photo ${esc(dateLabel(r.latest))}${r.latest.classified ? '' : ' (not assessed)'} ↗</a>` : '';
     const why = flags.length ? flags.map(k => `<div class="why-it"><span class="flag ${flagCls(k)}">${esc(flagLabel(r, k))}</span>${evidenceHtml(r, k)}${k === 'vegetation' ? '<div class="hint">Judged from overlap in the photo; a branch behind or in front of the pole can read as touching it.</div>' : ''}</div>`).join('')
-      : `<div class="why-it"><span class="flag dim">${PP.conditionUnclear(r) ? 'Condition could not be assessed from the photos' : util ? 'No flagged condition. Listed as part of the inventory; not inspected.' : 'Not a utility pole'}</span></div>`;
+      : `<div class="why-it"><span class="flag dim">${PP.conditionUnclear(r) ? 'Condition could not be assessed from the photos' : util ? 'No condition flagged. Listed as part of the inventory; not inspected.' : 'Not a utility pole'}</span></div>`;
     // Lead block: what was found, why the model says so, and where and when. The flag the reader
     // filtered on leads; with no filter, PP.orderFlags falls back to the documented severity order.
     const lead = flags[0] || null;
     const ctx = !lead ? (util ? 'Record' : 'Not a utility pole')
       : PP.FILTER_FLAG[state.flag] === lead ? `Shown for: ${esc(L.flag[lead])}` : 'Primary finding';
     const leadChip = lead ? `<span class="flag ${flagCls(lead)}">${esc(flagLabel(r, lead))}</span>`
-      : `<span class="flag dim">${PP.conditionUnclear(r) ? 'Condition could not be assessed from the photos' : util ? 'No flagged condition' : esc(L.type[r.type] || 'Other object')}</span>`;
+      : `<span class="flag dim">${PP.conditionUnclear(r) ? 'Condition could not be assessed from the photos' : util ? 'No condition flagged' : esc(L.type[r.type] || 'Other object')}</span>`;
     const also = flags.slice(1);
     // Finding, where, when. The rationale is not repeated here: it belongs to "Model findings"
     // directly below, and printing it twice was the longest thing in the old panel.
     const primary = `<div class="primary">
         <div class="ctx">${ctx}</div>
         <div class="lead">${leadChip}</div>
-        <div class="where"><span class="mono">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span><span>Photo shown <b class="mono">${esc(dateLabel(r.shown))}</b> <span class="muted">${esc(PP.ageLabel(r.shown.ts, state.now))}</span></span>${mapsLinks(r)}</div>
+        ${(() => { const place = placeLabel(r); return place ? `<div class="place">${esc(place)}</div>` : ''; })()}
+        <div class="where"><span class="mono">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span><span>Photo: <b>${esc(longDate(r.shown))}</b></span>${mapsLinks(r)}</div>
         ${also.length ? `<div class="also"><span class="lbl">Also found:</span>${also.map(k => `<span class="flag ${flagCls(k)}">${esc(L.flag[k])}</span>`).join('')}</div>` : ''}
       </div>`;
     const attrs = [
@@ -431,16 +455,16 @@
             <div class="review-foot"><span class="hint" style="margin:0">Saved in this browser only.</span><button class="btn sm bd" id="rreset">Clear</button><button class="btn sm bd" id="nextun">Next unreviewed</button></div></div>` : '';
     $('detail').innerHTML = `
       <div class="detail-h"><button class="btn sm act" id="back">← Back to results</button>
-        <button class="btn sm" id="list-toggle" aria-pressed="${state.listOpen !== false}" aria-label="Show or hide the results list" title="Show or hide the results list">List</button>
+        <button class="btn sm bd" id="list-toggle" aria-pressed="${state.listOpen !== false}">${state.listOpen === false ? 'Show results' : 'Hide results'}</button>
         <span class="sep" aria-hidden="true"></span><span class="id">${esc(r.id)}</span><span class="pos" id="pos"></span>
         <div class="nav"><button class="btn sm bd" id="prev" aria-label="Previous pole">Prev</button><button class="btn sm bd" id="next" aria-label="Next pole">Next</button>
           <span class="sep" aria-hidden="true"></span>
-          <a class="btn sm act" id="streetview" href="${esc(panoUrl(r))}" target="_blank" rel="noopener" title="Google Street View here — a different provider on a different date, so it is an independent check on what is standing now">Street View ↗</a><button class="btn sm act" id="share">Copy link</button><button class="btn sm" id="close" aria-label="Close details">Close</button></div></div>
+          <a class="btn sm act" id="streetview" href="${esc(panoUrl(r))}" target="_blank" rel="noopener" title="Google Street View here — a different provider on a different date, so it is an independent check on what is standing now">Street View ↗</a><button class="btn sm act" id="share">Copy link</button></div></div>
       ${state.example ? `<div class="example-tag">Example record. Pick any pole from the list or map.</div>` : ''}
       <div class="dbody">
         <div class="dphoto">
           <div class="stage">${photo}${f && f.img ? ovbar : ''}</div>
-          <div class="cap"><span><b class="when">${esc(dateLabel(f))}</b> <span class="muted">${esc(PP.ageLabel(f && f.ts, state.now))}</span>${f && f.pano ? ' · 360°' : ''}${f && f.shown ? (r.shown.newest ? ' · newest readable' : ' · clearest available') : ''}</span>
+          <div class="cap"><span><b class="when">Photo: ${esc(longDate(f))}</b> <span class="muted">${esc(PP.ageLabel(f && f.ts, state.now))}</span>${f && f.pano ? ' · 360°' : ''}${f && f.shown ? (r.shown.newest ? ' · newest readable' : ' · clearest available') : ''}</span>
             ${f && f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">Source ↗</a>` : ''}${f && f.img ? `<button class="lnk" id="enlarge">Enlarge</button>` : ''}${f && f.by ? `<span class="muted small">by ${esc(f.by)}</span>` : ''}${latest}</div>
           ${strip}
         </div>
@@ -573,7 +597,7 @@
       toMain() { if (mode !== 'mini') return; $('mapwrap').insertBefore(box, $('mapwrap').firstChild); mode = 'main'; map.resize(); },
     };
     function renderLegend() {
-      const cond = `<div><i style="background:#c2410c"></i>Possible condition issue</div><div><i class="warn"></i>Slight lean, watch item</div><div><i style="background:#fff"></i>No flagged condition</div><div><i style="background:#e3e3df"></i>Cannot tell from photos</div>`;
+      const cond = `<div><i style="background:#c2410c"></i>Possible condition issue</div><div><i class="warn"></i>Slight lean, watch item</div><div><i style="background:#fff"></i>No condition flagged</div><div><i style="background:#e3e3df"></i>Cannot tell from photos</div>`;
       const att = `<div><i style="background:#2c6e6b"></i>3 or more attachments</div><div><i style="background:#9ccbc9"></i>1 to 2 attachments</div><div><i style="background:#fff"></i>No attachments seen</div><div><i style="background:#e3e3df"></i>Cannot tell</div>`;
       $('legend').innerHTML = `<label>Color by <select id="cmode"><option value="condition"${state.colorMode === 'condition' ? ' selected' : ''}>condition flags</option><option value="attachments"${state.colorMode === 'attachments' ? ' selected' : ''}>attachment estimate</option></select></label>
         ${state.colorMode === 'condition' ? cond : att}${state.other ? '<div><i style="background:#bcbcb7"></i>Other detected object</div>' : ''}<div><i style="border-color:#1b5e8a;border-width:3px;background:none"></i>Selected</div>`;
@@ -725,6 +749,18 @@
     $('sort').addEventListener('change', e => { state.sort = e.target.value; refresh(); });
     $('reset').addEventListener('click', () => { resetFilters(); writeHash(false); closeMenus(); });
     $('more-done').addEventListener('click', () => { closeMenus(); $('more-btn').focus(); });
+    // Search composes with every other filter through applyFilters, so it needs no special casing
+    // beyond keeping the field, the URL and the Clear button in step.
+    const setQuery = (v, focus) => {
+      state.q = v; $('q').value = v; $('q-clear').hidden = !v;
+      refresh(); writeHash(false);
+      if (state.selected) renderDetail();
+      if (focus) $('q').focus();
+    };
+    state.setQuery = setQuery;
+    $('q').addEventListener('input', e => setQuery(e.target.value));
+    $('q').addEventListener('keydown', e => { if (e.key === 'Escape' && $('q').value) { e.stopPropagation(); setQuery('', true); } });
+    $('q-clear').addEventListener('click', () => setQuery('', true));
     $('list-rail').addEventListener('click', () => { setListOpen(true); const row = document.querySelector('.row'); if (row) row.focus(); });
     $('other').addEventListener('change', e => { state.other = e.target.checked; state.flag = 'all'; refresh(); if (mapApi) mapApi.recolor(); });
     $('years').addEventListener('change', e => { state.years = e.target.checked; refresh(); });
@@ -747,8 +783,8 @@
       const pt = e.target.closest && e.target.closest('.tilt .pt'); if (pt) { state.viewing = +pt.dataset.i; state.compare = false; renderDetail(); return; }
       const t = e.target.closest('button'); if (!t) return;
       if (t.id === 'ann-btn') { toggleMenu('ann-btn', 'ann-menu'); return; }
-      if (t.id === 'list-toggle') { setListOpen(!state.listOpen); t.setAttribute('aria-pressed', String(state.listOpen)); return; }
-      if (t.id === 'back' || t.id === 'close') { close(); return; }
+      if (t.id === 'list-toggle') { setListOpen(!state.listOpen); renderDetail(); const b = $('list-toggle'); if (b) b.focus(); return; }
+      if (t.id === 'back') { close(); return; }
       if (t.id === 'fullmap') { close(true); return; }
       if (t.id === 'prev') { step(-1); return; } if (t.id === 'next') { step(1); return; }
       if (t.id === 'nextun') { nextUnreviewed(); return; }
@@ -828,6 +864,8 @@
     // inside the result set it was shared from ("3 of 27") rather than inside all poles.
     const h = parseHash();
     if (h.issue) state.flag = h.issue;
+    else if (!h.pole) state.flag = DEFAULT_FLAG;   // a shared #pole= link must not be filtered out of its own list
+    if (h.q) { state.q = h.q; $('q').value = h.q; $('q-clear').hidden = false; }
     refresh();
     if (h.pole) {
       if (!select(h.pole, { silent: true, focus: false })) $('count').insertAdjacentHTML('afterend', `<div class="empty">No record with id <span class="mono">${esc(h.pole)}</span> in this dataset.</div>`);

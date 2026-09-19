@@ -81,6 +81,10 @@
 <div class="ws" id="ws" data-tab="list">
   <button class="rail" id="list-rail" aria-label="Show results list" hidden><span aria-hidden="true">›</span><span class="rail-t">Results</span></button>
   <section class="pane" aria-label="Results">
+    <div class="search">
+      <input type="search" id="q" placeholder="Search pole id or street" aria-label="Search pole records by id, street, or coordinates" autocomplete="off" spellcheck="false">
+      <button class="btn sm" id="q-clear" aria-label="Clear search" hidden>Clear</button>
+    </div>
     <div class="count" id="count" aria-live="polite"></div>
     <div class="map-notice" id="map-notice" hidden></div>
     <div class="list" id="list" role="listbox" aria-label="Pole records"></div>

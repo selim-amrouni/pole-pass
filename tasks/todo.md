@@ -269,3 +269,61 @@ itself precise is one string in `renderSummary()`.
       Zero console exceptions and no horizontal scroll across five areas x four viewports.
       Pages took ~90 s to switch over after the ref update.
 - Pre-existing and left alone: `/favicon.ico` 404s site-wide. Unrelated to this work.
+
+## Usability pass — 2026-09-18 (branch `feature/usability-pass`)
+
+Seven workflow fixes from a follow-up brief. No redesign; the information architecture from
+the previous pass is unchanged.
+
+- [x] **"Any issue" filter**, `FILTERS.any = hasConditionIssue` — the same predicate behind the
+      summary's condition-issue figure, so the chip count and that number cannot disagree.
+      Excludes watch-item-only and equipment-only records. `issue=any` in the URL.
+      Default on a first visit with no URL state; a shared `#pole=` link still opens under
+      All poles so the record is never filtered out of its own list. Reset clears to All poles.
+- [x] **One exit, one sidebar toggle.** `Close` removed; `List` became `Hide results`/`Show results`.
+- [x] **Human-readable location first.** See the street note below.
+- [x] **Stronger homepage hero.** Reading's example was chosen under a "clear, visible equipment,
+      NO flag" rule, which is exactly why the caption read "No flagged condition on this record".
+      Now `det:1987770838666454` (read-01552): 1040 px of pole, October 2025, a located transformer
+      and two attachments. The hero also draws the transformer BEFORE attachments — it used to be
+      dropped whenever the model found two attachments, losing the most legible thing in the frame.
+- [x] **Card order** Reading, Newton Lower Falls, Marblehead, Greenpoint, Hardwick. One computed
+      `Best imagery` badge, awarded to the highest recent-imagery share (Newton, 96%) rather than
+      hand-assigned, so it cannot go stale.
+- [x] **Search** by pole id, street text and typed coordinates. In the results pane, not the
+      toolbar — the top bar is at its width budget at 1363 px. Composes with every other filter
+      through `applyFilters`; `q=` in the URL.
+- [x] **Copy and placement.** `Photo: November 2025` in the inspector (rows keep `2025-11`);
+      `No flagged condition` -> `No condition flagged`; Compare moved beside the thumbnails and
+      disabled with one usable photo; the double-pole overlap sentence made concrete while keeping
+      the measured fact.
+
+### Street names now exist for every pole, not just double-pole pairs
+Street text was on 36 records site-wide (27 Marblehead + 9 Newton, all pair records) and on ZERO
+records in Reading, Greenpoint and Hardwick, which would have made "lead with a location" and street
+search invisible on three of five areas. `roadcover.py` gained `street_index()` / `nearest_street()`
+(grid-bucketed: `nearest_named_way()` scans every way per point, fine for 27 pairs, far too slow for
+1,739 poles) and report.py writes `st` / `st_m` per record. Coverage: Reading 1681/1739, Marblehead
+574/609, Newton 530/533, Greenpoint 952/962, Hardwick 1437/1731. Beyond 60 m nothing is claimed.
+
+`roads.json` was NOT cached for Reading, Greenpoint or Hardwick, so this needed a one-time Overpass
+fetch (cached forever, the project's normal cache-miss path). Greenpoint geocodes to an OSM way
+rather than a relation, so `roadcover.py` cannot derive its boundary; its roads were fetched by
+bbox with the same `roads_query` + `fetch_overpass` helpers.
+
+`MMLD maintains this side` -> `within MMLD service territory`. The split line supports a territory
+inference, not an ownership or maintenance claim.
+
+### Two knock-ons from reordering the cards
+- `deploy.sh` built territories.json in COMMAND-LINE order, so the homepage order depended on how
+  deploy was invoked. It now follows web/territories.json.
+- `forwardPoleLink` sent legacy root `#pole=` links to whichever card was first, which silently
+  became Reading. It now routes by the id's 4-letter area prefix.
+
+### Verification
+- `node --test tests/*.test.js` 54 pass; `uv run python3 -m unittest discover -s tests` 98 pass.
+- All five areas x {1440, 1363, 390}: Any issue default with the correct per-area count
+  (500/163/231/90/460), zero console exceptions, no horizontal scroll, search present.
+- Search by full id, partial id, street text, coordinates and a no-match query; combined with an
+  issue filter; prev/next stays inside the searched set; `#issue=any&q=main%20street` round-trips.
+- [ ] Not deployed.

@@ -69,7 +69,10 @@ known = {t["slug"]: t for t in json.load(open(src))}
 missing = [s for s in slugs if s not in known]
 if missing:
     sys.exit(f"add to web/territories.json first: {missing}")
-rows = [dict(known[s], stats=json.load(open(f"{out}/{s}/summary.json"))) for s in slugs]
+# Card order on the landing page comes from web/territories.json, not from the order the slugs were
+# typed on the command line -- otherwise the homepage reshuffles depending on how deploy was invoked.
+chosen = set(slugs)
+rows = [dict(known[s], stats=json.load(open(f"{out}/{s}/summary.json"))) for s in known if s in chosen]
 json.dump(rows, open(dst, "w"), indent=1)
 PY
 touch "$tmp/.nojekyll"
