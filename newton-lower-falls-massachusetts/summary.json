@@ -1,0 +1,78 @@
+{
+ "slug": "newton-lower-falls-massachusetts",
+ "location": "Newton Lower Falls, Massachusetts",
+ "version": "9b2ff084",
+ "generated": "2026-09-19",
+ "example": {
+  "id": "newt-00127",
+  "crop": "crops/1309247380868100.jpg",
+  "date": "2025-08",
+  "ts": 1756301361384,
+  "url": "https://www.mapillary.com/app/?pKey=1309240597535445&focus=photo",
+  "by": "Lanka6359",
+  "flags": [
+   "double",
+   "vegetation"
+  ],
+  "type": "wood_utility",
+  "marks": {
+   "top": [
+    0.63,
+    0.19
+   ],
+   "base": [
+    0.6,
+    0.96
+   ],
+   "att": [
+    {
+     "p": [
+      0.58,
+      0.68
+     ],
+     "l": "cable bundle attachment"
+    }
+   ],
+   "xfmr": null
+  }
+ },
+ "shown_by_month": {
+  "2024-03": 12,
+  "2024-04": 7,
+  "2025-03": 11,
+  "2025-04": 272,
+  "2025-05": 10,
+  "2025-07": 6,
+  "2025-08": 128,
+  "2025-10": 50,
+  "2025-11": 5,
+  "2025-12": 2,
+  "2026-02": 5,
+  "2026-06": 1
+ },
+ "undated": 0,
+ "counts": {
+  "records": 533,
+  "utility": 509,
+  "doubles": 9,
+  "condition_issues": 163,
+  "warnings": 136,
+  "frames_classified": 1389,
+  "photo_year_first": 2024,
+  "photo_year_last": 2026,
+  "multi_year": 3,
+  "not_in_osm": 509,
+  "osm_nodes": 0
+ },
+ "coverage": {
+  "images": 29455,
+  "area_km2": 1.27,
+  "capture_first": "2015-02-18",
+  "capture_last": "2026-07-20"
+ },
+ "sources": {
+  "poles": "data/poles/newton-lower-falls-massachusetts/summary.json",
+  "coverage": "data/coverage/newton-lower-falls-massachusetts/summary.json",
+  "osm": "data/osm/newton-lower-falls-massachusetts/summary.json"
+ }
+}
