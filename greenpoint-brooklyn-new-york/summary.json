@@ -1,0 +1,97 @@
+{
+ "slug": "greenpoint-brooklyn-new-york",
+ "location": "Greenpoint, Brooklyn",
+ "version": "4c2b25f2",
+ "generated": "2026-09-19",
+ "example": {
+  "id": "gree-00202",
+  "crop": "crops/619927453431602.jpg",
+  "date": "2019-12",
+  "ts": 1576508346152,
+  "url": "https://www.mapillary.com/app/?pKey=128955979195421&focus=photo",
+  "by": "smartmaper",
+  "flags": [],
+  "type": "wood_utility",
+  "marks": {
+   "top": [
+    0.51,
+    0.02
+   ],
+   "base": [
+    0.58,
+    0.99
+   ],
+   "att": [
+    {
+     "p": [
+      0.6,
+      0.73
+     ],
+     "l": "terminal box on pole"
+    }
+   ],
+   "xfmr": null
+  }
+ },
+ "shown_by_month": {
+  "2015-03": 4,
+  "2015-06": 32,
+  "2015-12": 5,
+  "2016-02": 2,
+  "2016-05": 2,
+  "2016-06": 22,
+  "2016-07": 13,
+  "2017-07": 1,
+  "2017-09": 1,
+  "2017-10": 1,
+  "2017-11": 1,
+  "2018-05": 51,
+  "2018-06": 27,
+  "2018-07": 5,
+  "2018-08": 70,
+  "2018-09": 19,
+  "2018-10": 1,
+  "2018-11": 1,
+  "2019-12": 68,
+  "2020-03": 5,
+  "2020-04": 11,
+  "2020-05": 3,
+  "2022-01": 4,
+  "2022-07": 5,
+  "2022-10": 1,
+  "2023-07": 2,
+  "2023-08": 3,
+  "2023-09": 4,
+  "2023-10": 205,
+  "2024-02": 10,
+  "2024-03": 54,
+  "2024-04": 9,
+  "2024-07": 59,
+  "2024-12": 5
+ },
+ "undated": 0,
+ "counts": {
+  "records": 962,
+  "utility": 706,
+  "doubles": 0,
+  "condition_issues": 90,
+  "warnings": 431,
+  "frames_classified": 3254,
+  "photo_year_first": 2015,
+  "photo_year_last": 2024,
+  "multi_year": 24,
+  "not_in_osm": 706,
+  "osm_nodes": 0
+ },
+ "coverage": {
+  "images": 105211,
+  "area_km2": 6.19,
+  "capture_first": "2014-08-09",
+  "capture_last": "2026-09-09"
+ },
+ "sources": {
+  "poles": "data/poles/greenpoint-brooklyn-new-york/summary.json",
+  "coverage": "data/coverage/greenpoint-brooklyn-new-york/summary.json",
+  "osm": "data/osm/greenpoint-brooklyn-new-york/summary.json"
+ }
+}
