@@ -355,4 +355,14 @@ inference, not an ownership or maintenance claim.
 - The street name is not in the CSV/GeoJSON exports. It is genuinely useful there, but the brief
   said not to change export columns in this pass.
 
-- [ ] Not deployed.
+### Deployed 2026-09-18 (second deploy of the day, PR #37)
+- [x] `./deploy.sh` with all five slugs, from main. Verified against the live URLs rather than the
+      exit code: five areas plus the landing page return 200; `territories.json` carries the new
+      card order; every area opens on Any issue with the right per-area count (500/163/231/90/460)
+      at 1440/1363/390 with no console exceptions and no horizontal scroll; street search returns
+      144 on "main street" in Reading and id search 3 on "read-0155"; `#issue=all` reopens as 706
+      in Greenpoint (the Back/Copy-link fault, confirmed fixed in production);
+      `#pole=marb-00016&issue=double` gives "3 of 27", leads with "Possible double pole", shows
+      "Harbor Avenue x Nanepashemet Street", and the inspector offers exactly Back to results /
+      Hide results / Prev / Next / Copy link. No "maintains this side" text anywhere.
+      Pages took ~75 s to switch over after the ref update.
