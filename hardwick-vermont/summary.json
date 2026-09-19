@@ -1,0 +1,74 @@
+{
+ "slug": "hardwick-vermont",
+ "location": "Hardwick, Vermont",
+ "version": "fc9db6ea",
+ "generated": "2026-09-19",
+ "example": {
+  "id": "hard-00742",
+  "crop": "crops/227228208854685.jpg",
+  "date": "2018-07",
+  "ts": 1530540329759,
+  "url": "https://www.mapillary.com/app/?pKey=226567928920713&focus=photo",
+  "by": "vtrans_row",
+  "flags": [],
+  "type": "wood_utility",
+  "marks": {
+   "top": [
+    0.55,
+    0.05
+   ],
+   "base": [
+    0.58,
+    0.98
+   ],
+   "att": [
+    {
+     "p": [
+      0.53,
+      0.35
+     ],
+     "l": "cable splice bundle"
+    }
+   ],
+   "xfmr": null
+  }
+ },
+ "shown_by_month": {
+  "2013-09": 14,
+  "2014-06": 64,
+  "2014-07": 45,
+  "2015-07": 67,
+  "2016-06": 195,
+  "2016-07": 200,
+  "2017-07": 144,
+  "2018-06": 89,
+  "2018-07": 487,
+  "2019-07": 281,
+  "2022-11": 5
+ },
+ "undated": 0,
+ "counts": {
+  "records": 1731,
+  "utility": 1591,
+  "doubles": 0,
+  "condition_issues": 460,
+  "warnings": 801,
+  "frames_classified": 5357,
+  "photo_year_first": 2013,
+  "photo_year_last": 2022,
+  "multi_year": 1148,
+  "not_in_osm": 1591,
+  "osm_nodes": 134
+ },
+ "coverage": {
+  "images": 71371,
+  "area_km2": 182.41,
+  "capture_first": "2013-09-06",
+  "capture_last": "2022-11-05"
+ },
+ "sources": {
+  "poles": "data/poles/hardwick-vermont/summary.json",
+  "coverage": "data/coverage/hardwick-vermont/summary.json",
+  "osm": "data/osm/hardwick-vermont/summary.json"
+ }
+}
