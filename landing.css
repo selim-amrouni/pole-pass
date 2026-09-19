@@ -1,0 +1,89 @@
+/* Pole Pass landing page. Tokens copied from web/style.css so the root page and the area pages read as one thing; keep them in sync.
+   Spacing scale 4 / 8 / 12 / 16 / 24 / 32 px. */
+:root {
+  --bg: #f4f4f2; --panel: #ffffff; --ink: #1c1c1a; --ink-2: #4b4b47; --ink-3: #5f5f5a; --line: #d8d8d3; --line-2: #ebebe7;
+  --accent: #1b5e8a; --accent-bg: #e6f0f7; --issue: #c2410c; --issue-bg: #fdf0e8; --issue-line: #efc9b6; --att: #2c6e6b;
+  --warn: #9a6a00; --warn-bg: #fbf3df; --warn-line: #e9d59f;
+  --ok: #3f6b2a; --focus: #1b5e8a;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace; --serif: "Fraunces", Georgia, serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--sans); overflow-x: clip; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mono { font-family: var(--mono); font-size: .93em; } .muted { color: var(--ink-3); } .small { font-size: 13px; }
+[hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); cursor: pointer; text-decoration: none; color: var(--ink); font-size: 15px; white-space: nowrap; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.hdr { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 24px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { font-family: var(--serif); font-size: 21px; font-weight: 500; letter-spacing: -.01em; }
+.hdr nav { display: flex; align-items: center; gap: 16px; } .hdr nav a { font-size: 15px; text-decoration: none; color: var(--ink-2); } .hdr nav a.btn { color: var(--ink); }
+
+main { max-width: 1040px; margin: 0 auto; padding: 8px 24px 40px; }
+.intro { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(300px, .95fr); gap: 32px; align-items: start; padding: 32px 0 24px; }
+h1 { font-family: var(--serif); font-weight: 500; font-size: clamp(32px, 4vw, 46px); line-height: 1.12; letter-spacing: -.01em; margin: 8px 0 16px; }
+h2 { font-size: 20px; font-weight: 600; margin: 32px 0 12px; }
+.lede { font-size: 18px; color: var(--ink-2); margin: 0 0 20px; max-width: 46ch; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.note { font-size: 14px; color: var(--ink-3); margin: 0; max-width: 48ch; }
+.hero { margin: 0; }
+.hero .frame { position: relative; height: 540px; min-width: 240px; max-width: 100%; width: fit-content; margin: 0 auto; background: #111; border-radius: 8px; overflow: hidden; }
+.hero .frame img { display: block; height: 100%; width: auto; max-width: 100%; object-fit: contain; }
+.hero .frame > svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.hero .frame .ph { position: absolute; inset: 0; display: grid; place-items: center; color: #bbb; font-size: 14px; padding: 16px; text-align: center; }
+.hero .frame polygon, .hero .frame line, .hero .frame circle, .hero .frame rect { vector-effect: non-scaling-stroke; }
+.hero .axis { stroke: #8fd3ff; stroke-width: 2px; stroke-dasharray: 6 4; fill: none; }
+.hero .mk { fill: rgba(255,255,255,.92); stroke-width: 2px; } .hero .mk.att { stroke: var(--att); } .hero .mk.xfmr { stroke: var(--ink); }
+.hero text { font-family: var(--sans); font-weight: 600; fill: var(--ink); }
+.hero .key { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 3px 10px; padding: 5px 8px; border-radius: 6px; background: rgba(255,255,255,.92); font-size: 12.5px; color: var(--ink-2); }
+.hero .key span { display: inline-flex; align-items: center; gap: 5px; } .hero .key .kt { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.hero .key .g { width: 14px; height: 14px; fill: none; stroke-width: 1.6; } .hero .key .g.axis { stroke: #8fd3ff; stroke-width: 2; stroke-dasharray: 3 2; } .hero .key .g.att { stroke: var(--att); fill: #fff; } .hero .key .g.xfmr { stroke: var(--ink); fill: #fff; }
+.hero figcaption { font-size: 14px; color: var(--ink-2); margin-top: 8px; line-height: 1.5; } .hero figcaption .small { color: var(--ink-3); }
+
+.areas h2 { margin-top: 16px; }
+/* auto-fit rather than a fixed count: the row was hardcoded to 3 and the fourth territory
+   dropped onto its own line. At the 992px content width this fits 4 across, and it keeps
+   working when a fifth is added instead of needing another edit. */
+/* Fixed 3 columns, not auto-fit. auto-fit packs as many cards as fit, which put four across and
+   orphaned the fifth on a row of its own. Three columns gives 5 areas a 3+2 layout that still reads
+   as a grid, and leaves room for a sixth without touching this file. */
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.card { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.card .pic { position: relative; aspect-ratio: 4 / 5; background: #2a2a28; }
+.card .pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; } .card .pic .ph { position: absolute; inset: 0; display: grid; place-items: center; color: #bbb; font-size: 13px; } .card .pic.nophoto .ph { display: grid !important; }
+.card .body { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.card .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+/* min-width: 0 lets the name wrap instead of holding the row at its content width. Without it a long
+   name ("Newton Lower Falls, Massachusetts") pushed the kind badge past the card edge, where
+   .card's overflow: hidden clipped it to "SUBURBA". */
+.card .name { font-family: var(--serif); font-size: clamp(17px, 1.9vw, 21px); font-weight: 500; line-height: 1.2; min-width: 0; }
+.kind { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-3); white-space: nowrap; flex: 0 0 auto; }
+.kind.city { background: var(--accent-bg); border-color: #c5d9e8; color: var(--accent); }
+.kind.backcountry { background: #e9f1e4; border-color: #c3d8b8; color: var(--ok); }
+.kind.suburb { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
+.card .n { font-size: 15px; } .card .n b { font-family: var(--mono); font-weight: 500; }
+.card .fresh { font-size: 14px; color: var(--ink-2); }
+.badge { display: inline-block; margin-left: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 4px; background: var(--ok-bg, #edf3e8); border: 1px solid #c3d8b8; color: var(--ok); white-space: nowrap; }
+.card .btn { align-self: flex-start; margin-top: 8px; }
+.empty { color: var(--ink-3); border: 1px dashed var(--line); border-radius: 8px; padding: 18px; grid-column: 1 / -1; }
+
+.prose { max-width: 72ch; }
+.prose p { margin: 0 0 12px; color: var(--ink-2); }
+.steps { padding-left: 20px; margin: 0 0 8px; color: var(--ink-2); } .steps li { margin-bottom: 8px; }
+.prose .btn { margin-left: 4px; vertical-align: middle; }
+.foot { max-width: 1040px; margin: 0 auto; padding: 16px 24px 32px; border-top: 1px solid var(--line-2); color: var(--ink-2); font-size: 14px; }
+.foot p { margin: 4px 0; }
+
+@media (max-width: 900px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 800px) {
+  .intro { grid-template-columns: 1fr; gap: 20px; padding-top: 20px; }
+  .hero .frame { height: min(60vh, 480px); }
+  .hdr { padding: 8px 16px; } .hdr nav { gap: 10px; } .hdr nav a { font-size: 14px; }
+  main { padding: 8px 16px 32px; }
+}
+@media (max-width: 560px) { .cards { grid-template-columns: 1fr; } h1 { font-size: 30px; } }
+@media (max-width: 480px) { .brand { white-space: nowrap; } .hdr nav a { white-space: nowrap; } .hdr nav a[href="#how"] { display: none; } }

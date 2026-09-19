@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pole Pass</title>
+<meta name="description" content="Utility poles, viewed from the street. Public street photos mapped to pole records with visible equipment and possible issues, one page per area.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="landing.css">
+</head>
+<body>
+<header class="hdr">
+  <span class="brand">Pole Pass</span>
+  <nav><a href="#areas">Explore areas</a><a href="#how">How it works</a><a class="btn" href="mailto:selim.amrouni@gmail.com">Contact</a></nav>
+</header>
+
+<main>
+  <section class="intro">
+    <div class="copy">
+      <h1>Utility poles, viewed from the street.</h1>
+      <p class="lede">I used public street photos to map poles, identify visible equipment, and flag things worth checking. Open a pole to see the photos and judge the result.</p>
+      <p class="actions"><a class="btn primary" href="#areas">Explore the areas</a><a class="btn" href="#how">How it works</a></p>
+      <p class="note">Experimental. Model flags need human review; photos do not establish structural condition.</p>
+    </div>
+    <figure class="hero" id="hero">
+      <div class="frame" id="hero-frame"><div class="ph">Loading example…</div></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </section>
+
+  <section id="areas" class="areas">
+    <h2>Pick an area</h2>
+    <div class="cards" id="cards" aria-live="polite"></div>
+  </section>
+
+  <section id="how" class="prose">
+    <h2>How it works</h2>
+    <ol class="steps">
+      <li><b>Find poles.</b> Mapillary detections identify candidate poles in public street photos.</li>
+      <li><b>Read the photos.</b> A vision model describes visible equipment and flags possible issues.</li>
+      <li><b>Check the result.</b> Open each record to review its photos, compare views, and record your assessment.</li>
+    </ol>
+    <h2>What it cannot do</h2>
+    <p>Photos cannot establish structural condition, electrical loading, ownership, or compliance. Old images, camera angles, and obstructions can mislead the model. A record with no flag has not been inspected.</p>
+    <p class="muted">Each area page has the technical details: how photos are chosen, how records are merged, how dates are used, and what has and has not been validated. The comparison with OpenStreetMap uses volunteer mapping, not utility inventory.</p>
+    <h2>Try another area</h2>
+    <p>Have an area in mind? Send me the town or service territory. I'll check the available imagery. <a class="btn primary" href="mailto:selim.amrouni@gmail.com">Ask about another area</a></p>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>Built by Selim Amrouni. <a href="https://github.com/selim-amrouni/pole-pass">Source on GitHub</a>.</p>
+  <p class="muted small" id="attribution">Imagery and detections © Mapillary contributors, CC BY-SA 4.0. Derived data ODbL. Basemap and pole comparison © OpenStreetMap contributors.</p>
+</footer>
+<script src="landing.js"></script>
+</body>
+</html>

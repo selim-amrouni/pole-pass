@@ -1,0 +1,437 @@
+[
+ {
+  "slug": "reading-massachusetts",
+  "name": "Reading, Massachusetts",
+  "kind": "suburb",
+  "stats": {
+   "slug": "reading-massachusetts",
+   "location": "Reading, Massachusetts",
+   "version": "4d8f0bee",
+   "generated": "2026-09-19",
+   "example": {
+    "id": "read-01552",
+    "crop": "crops/1987770838666454.jpg",
+    "date": "2025-10",
+    "ts": 1761044674324,
+    "url": "https://www.mapillary.com/app/?pKey=1987751132001758&focus=photo",
+    "by": "mapillary01730",
+    "flags": [],
+    "type": "wood_utility",
+    "marks": {
+     "top": [
+      0.44,
+      0.19
+     ],
+     "base": [
+      0.47,
+      1
+     ],
+     "att": [
+      {
+       "p": [
+        0.55,
+        0.39
+       ],
+       "l": "cable splice box"
+      },
+      {
+       "p": [
+        0.23,
+        0.49
+       ],
+       "l": "terminal box"
+      }
+     ],
+     "xfmr": [
+      0.55,
+      0.28
+     ]
+    }
+   },
+   "shown_by_month": {
+    "2017-09": 1,
+    "2017-10": 263,
+    "2018-01": 15,
+    "2018-04": 2,
+    "2018-07": 3,
+    "2018-08": 12,
+    "2018-09": 20,
+    "2018-10": 7,
+    "2018-11": 1,
+    "2019-03": 2,
+    "2020-02": 4,
+    "2020-05": 1,
+    "2020-07": 51,
+    "2020-08": 1,
+    "2020-11": 13,
+    "2021-06": 35,
+    "2021-07": 8,
+    "2021-08": 1,
+    "2021-10": 4,
+    "2023-03": 47,
+    "2023-12": 11,
+    "2024-04": 4,
+    "2025-08": 128,
+    "2025-10": 700,
+    "2025-11": 251,
+    "2026-02": 3,
+    "2026-06": 1
+   },
+   "undated": 0,
+   "counts": {
+    "records": 1739,
+    "utility": 1589,
+    "doubles": 0,
+    "condition_issues": 500,
+    "warnings": 462,
+    "frames_classified": 5929,
+    "photo_year_first": 2017,
+    "photo_year_last": 2026,
+    "multi_year": 74,
+    "not_in_osm": 1470,
+    "osm_nodes": 189
+   },
+   "coverage": {
+    "images": 98589,
+    "area_km2": 39.42,
+    "capture_first": "2015-03-14",
+    "capture_last": "2026-06-24"
+   },
+   "sources": {
+    "poles": "data/poles/reading-massachusetts/summary.json",
+    "coverage": "data/coverage/reading-massachusetts/summary.json",
+    "osm": "data/osm/reading-massachusetts/summary.json"
+   }
+  }
+ },
+ {
+  "slug": "newton-lower-falls-massachusetts",
+  "name": "Newton Lower Falls, Massachusetts",
+  "kind": "suburb",
+  "stats": {
+   "slug": "newton-lower-falls-massachusetts",
+   "location": "Newton Lower Falls, Massachusetts",
+   "version": "9b2ff084",
+   "generated": "2026-09-19",
+   "example": {
+    "id": "newt-00127",
+    "crop": "crops/1309247380868100.jpg",
+    "date": "2025-08",
+    "ts": 1756301361384,
+    "url": "https://www.mapillary.com/app/?pKey=1309240597535445&focus=photo",
+    "by": "Lanka6359",
+    "flags": [
+     "double",
+     "vegetation"
+    ],
+    "type": "wood_utility",
+    "marks": {
+     "top": [
+      0.63,
+      0.19
+     ],
+     "base": [
+      0.6,
+      0.96
+     ],
+     "att": [
+      {
+       "p": [
+        0.58,
+        0.68
+       ],
+       "l": "cable bundle attachment"
+      }
+     ],
+     "xfmr": null
+    }
+   },
+   "shown_by_month": {
+    "2024-03": 12,
+    "2024-04": 7,
+    "2025-03": 11,
+    "2025-04": 272,
+    "2025-05": 10,
+    "2025-07": 6,
+    "2025-08": 128,
+    "2025-10": 50,
+    "2025-11": 5,
+    "2025-12": 2,
+    "2026-02": 5,
+    "2026-06": 1
+   },
+   "undated": 0,
+   "counts": {
+    "records": 533,
+    "utility": 509,
+    "doubles": 9,
+    "condition_issues": 163,
+    "warnings": 136,
+    "frames_classified": 1389,
+    "photo_year_first": 2024,
+    "photo_year_last": 2026,
+    "multi_year": 3,
+    "not_in_osm": 509,
+    "osm_nodes": 0
+   },
+   "coverage": {
+    "images": 29455,
+    "area_km2": 1.27,
+    "capture_first": "2015-02-18",
+    "capture_last": "2026-07-20"
+   },
+   "sources": {
+    "poles": "data/poles/newton-lower-falls-massachusetts/summary.json",
+    "coverage": "data/coverage/newton-lower-falls-massachusetts/summary.json",
+    "osm": "data/osm/newton-lower-falls-massachusetts/summary.json"
+   }
+  }
+ },
+ {
+  "slug": "marblehead-massachusetts",
+  "name": "Marblehead, Massachusetts",
+  "kind": "suburb",
+  "stats": {
+   "slug": "marblehead-massachusetts",
+   "location": "Marblehead, Massachusetts",
+   "version": "344c06b3",
+   "generated": "2026-09-19",
+   "example": {
+    "id": "marb-00282",
+    "crop": "crops/843980090181831.jpg",
+    "date": "2023-08",
+    "ts": 1692471889013,
+    "url": "https://www.mapillary.com/app/?pKey=843876230192217&focus=photo",
+    "by": "BobEisenman",
+    "flags": [
+     "double"
+    ],
+    "type": "wood_utility",
+    "marks": {
+     "top": [
+      0.62,
+      0
+     ],
+     "base": [
+      0.38,
+      0.79
+     ],
+     "att": [],
+     "xfmr": null
+    }
+   },
+   "shown_by_month": {
+    "2023-08": 165,
+    "2023-11": 186,
+    "2024-06": 1,
+    "2025-11": 230
+   },
+   "undated": 0,
+   "counts": {
+    "records": 609,
+    "utility": 582,
+    "doubles": 27,
+    "condition_issues": 231,
+    "warnings": 225,
+    "frames_classified": 2182,
+    "photo_year_first": 2023,
+    "photo_year_last": 2025,
+    "multi_year": 12,
+    "not_in_osm": 552,
+    "osm_nodes": 169
+   },
+   "coverage": {
+    "images": 21146,
+    "area_km2": 131.04,
+    "capture_first": "2011-10-21",
+    "capture_last": "2026-08-28"
+   },
+   "sources": {
+    "poles": "data/poles/marblehead-massachusetts/summary.json",
+    "coverage": "data/coverage/marblehead-massachusetts/summary.json",
+    "osm": "data/osm/marblehead-massachusetts/summary.json"
+   }
+  }
+ },
+ {
+  "slug": "greenpoint-brooklyn-new-york",
+  "name": "Greenpoint, Brooklyn",
+  "kind": "city",
+  "stats": {
+   "slug": "greenpoint-brooklyn-new-york",
+   "location": "Greenpoint, Brooklyn",
+   "version": "4c2b25f2",
+   "generated": "2026-09-19",
+   "example": {
+    "id": "gree-00202",
+    "crop": "crops/619927453431602.jpg",
+    "date": "2019-12",
+    "ts": 1576508346152,
+    "url": "https://www.mapillary.com/app/?pKey=128955979195421&focus=photo",
+    "by": "smartmaper",
+    "flags": [],
+    "type": "wood_utility",
+    "marks": {
+     "top": [
+      0.51,
+      0.02
+     ],
+     "base": [
+      0.58,
+      0.99
+     ],
+     "att": [
+      {
+       "p": [
+        0.6,
+        0.73
+       ],
+       "l": "terminal box on pole"
+      }
+     ],
+     "xfmr": null
+    }
+   },
+   "shown_by_month": {
+    "2015-03": 4,
+    "2015-06": 32,
+    "2015-12": 5,
+    "2016-02": 2,
+    "2016-05": 2,
+    "2016-06": 22,
+    "2016-07": 13,
+    "2017-07": 1,
+    "2017-09": 1,
+    "2017-10": 1,
+    "2017-11": 1,
+    "2018-05": 51,
+    "2018-06": 27,
+    "2018-07": 5,
+    "2018-08": 70,
+    "2018-09": 19,
+    "2018-10": 1,
+    "2018-11": 1,
+    "2019-12": 68,
+    "2020-03": 5,
+    "2020-04": 11,
+    "2020-05": 3,
+    "2022-01": 4,
+    "2022-07": 5,
+    "2022-10": 1,
+    "2023-07": 2,
+    "2023-08": 3,
+    "2023-09": 4,
+    "2023-10": 205,
+    "2024-02": 10,
+    "2024-03": 54,
+    "2024-04": 9,
+    "2024-07": 59,
+    "2024-12": 5
+   },
+   "undated": 0,
+   "counts": {
+    "records": 962,
+    "utility": 706,
+    "doubles": 0,
+    "condition_issues": 90,
+    "warnings": 431,
+    "frames_classified": 3254,
+    "photo_year_first": 2015,
+    "photo_year_last": 2024,
+    "multi_year": 24,
+    "not_in_osm": 706,
+    "osm_nodes": 0
+   },
+   "coverage": {
+    "images": 105211,
+    "area_km2": 6.19,
+    "capture_first": "2014-08-09",
+    "capture_last": "2026-09-09"
+   },
+   "sources": {
+    "poles": "data/poles/greenpoint-brooklyn-new-york/summary.json",
+    "coverage": "data/coverage/greenpoint-brooklyn-new-york/summary.json",
+    "osm": "data/osm/greenpoint-brooklyn-new-york/summary.json"
+   }
+  }
+ },
+ {
+  "slug": "hardwick-vermont",
+  "name": "Hardwick, Vermont",
+  "kind": "backcountry",
+  "stats": {
+   "slug": "hardwick-vermont",
+   "location": "Hardwick, Vermont",
+   "version": "fc9db6ea",
+   "generated": "2026-09-19",
+   "example": {
+    "id": "hard-00742",
+    "crop": "crops/227228208854685.jpg",
+    "date": "2018-07",
+    "ts": 1530540329759,
+    "url": "https://www.mapillary.com/app/?pKey=226567928920713&focus=photo",
+    "by": "vtrans_row",
+    "flags": [],
+    "type": "wood_utility",
+    "marks": {
+     "top": [
+      0.55,
+      0.05
+     ],
+     "base": [
+      0.58,
+      0.98
+     ],
+     "att": [
+      {
+       "p": [
+        0.53,
+        0.35
+       ],
+       "l": "cable splice bundle"
+      }
+     ],
+     "xfmr": null
+    }
+   },
+   "shown_by_month": {
+    "2013-09": 14,
+    "2014-06": 64,
+    "2014-07": 45,
+    "2015-07": 67,
+    "2016-06": 195,
+    "2016-07": 200,
+    "2017-07": 144,
+    "2018-06": 89,
+    "2018-07": 487,
+    "2019-07": 281,
+    "2022-11": 5
+   },
+   "undated": 0,
+   "counts": {
+    "records": 1731,
+    "utility": 1591,
+    "doubles": 0,
+    "condition_issues": 460,
+    "warnings": 801,
+    "frames_classified": 5357,
+    "photo_year_first": 2013,
+    "photo_year_last": 2022,
+    "multi_year": 1148,
+    "not_in_osm": 1591,
+    "osm_nodes": 134
+   },
+   "coverage": {
+    "images": 71371,
+    "area_km2": 182.41,
+    "capture_first": "2013-09-06",
+    "capture_last": "2022-11-05"
+   },
+   "sources": {
+    "poles": "data/poles/hardwick-vermont/summary.json",
+    "coverage": "data/coverage/hardwick-vermont/summary.json",
+    "osm": "data/osm/hardwick-vermont/summary.json"
+   }
+  }
+ }
+]
