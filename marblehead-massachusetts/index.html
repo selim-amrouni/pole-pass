@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pole Pass · Marblehead, Massachusetts</title>
+<meta name="description" content="Utility poles from street-level photos in Marblehead, Massachusetts. An experiment with public Mapillary imagery.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:wght@500&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=17cb337d">
+</head>
+<body>
+<header class="hdr">
+  <a class="brand" href="../" title="All areas">Pole Pass</a>
+  <span class="loc"><select id="territory" aria-label="Area" hidden></select><span id="loc-name">Marblehead, Massachusetts</span><span class="kind" id="kind" hidden></span></span>
+  <span class="sum" id="summary" aria-label="Dataset summary"></span>
+  <button class="notice-inline" id="notice-btn" title="Experimental results. The model's assessments have not been independently verified.">Experimental · not verified</button>
+  <nav>
+    <a class="btn sm" href="#about">About</a>
+    <a class="btn sm bd" href="mailto:selim.amrouni@gmail.com">Contact / feedback</a>
+  </nav>
+</header>
+
+<div class="toolbar" id="toolbar">
+  <div class="filters" id="filters">
+    <div class="group" id="g-issues" role="group" aria-label="Possible issues"><span class="gl">Issues</span><div class="chips" id="chips"></div></div>
+    <div class="group" id="g-equip" role="group" aria-label="Equipment"><span class="gl">Equipment</span><div class="chips" id="chips-eq"></div></div>
+    <div class="group" id="g-review" role="group" aria-label="Review status"><span class="gl">Review</span>
+      <span class="seg" id="review-seg"><button data-rs="all" aria-pressed="true">All</button><button data-rs="unreviewed" aria-pressed="false">Unreviewed</button><button data-rs="reviewed" aria-pressed="false">Reviewed</button></span>
+      <span class="mono small muted" id="review-n" title="Poles carrying a flag of any kind — condition, watch item, 3+ attachments or a transformer. These are the records with something to decide."></span></div>
+  </div>
+  <div class="tools">
+    <div class="menu">
+      <button class="btn sm" id="dates-btn" aria-haspopup="dialog" aria-expanded="false">Photos <span id="dates-label" class="mono"></span> ▾</button>
+      <div class="menu-list wide" id="dates-menu" role="dialog" aria-label="Photo date range" hidden>
+        <div class="h">Capture date of the photo shown</div>
+        <div class="row2"><label for="year-min">From</label><input type="number" id="year-min" aria-label="Earliest photo year" inputmode="numeric"><label for="year-max">to</label><input type="number" id="year-max" aria-label="Latest photo year" inputmode="numeric"></div>
+        <label class="chk"><input type="checkbox" id="recent"> Within the last 24 months <span class="mono" id="recent-n"></span></label>
+        <p class="hint">The photo shown is the newest assessed photo where the pole is readable, so it can be older than the latest photo available. Ages count from the capture date.</p>
+      </div>
+    </div>
+    <div class="menu">
+      <button class="btn sm" id="more-btn" aria-haspopup="dialog" aria-expanded="false">More filters<span class="mono dot" id="more-n" hidden></span></button>
+      <div class="menu-list wide scroll" id="more-menu" role="dialog" aria-label="More filters" hidden>
+        <div id="more-fold"></div>
+        <div class="h">Watch items</div>
+        <div class="chips" id="chips-more"></div>
+        <div class="h">More</div>
+        <label class="chk"><input type="checkbox" id="years"> Photographed in more than one year <span class="mono" id="years-n"></span></label>
+        <label class="chk" id="osm-wrap" hidden><input type="checkbox" id="osm"> No OpenStreetMap pole within 15 m <span class="mono" id="osm-n"></span></label>
+        <label class="chk"><input type="checkbox" id="other"> Show other detected objects instead of poles</label>
+        <div class="menu-foot"><button class="btn sm" id="reset">Reset filters</button><button class="btn sm" id="more-done">Done</button></div>
+      </div>
+    </div>
+    <label class="sortwrap"><span class="sr">Sort</span>
+      <select id="sort" aria-label="Sort">
+        <option value="date_desc">Newest photo first</option>
+        <option value="date_asc">Oldest photo first</option>
+        <option value="flags_desc">Most flags first</option>
+        <option value="att_desc">Most attachments</option>
+      </select>
+    </label>
+    <div class="menu">
+      <button class="btn sm" id="export-btn" aria-haspopup="dialog" aria-expanded="false">Export</button>
+      <div class="menu-list" id="export-menu" role="dialog" aria-label="Export" hidden>
+        <div class="h">Filtered results, with your review columns</div>
+        <button id="exp-csv-f">CSV</button><button id="exp-geo-f">GeoJSON</button>
+        <div class="h">All records, model fields only</div>
+        <a href="poles.csv" download>CSV</a><a href="poles.geojson" download>GeoJSON</a>
+        <div class="h">Your review decisions (this browser)</div>
+        <button id="exp-review">Export JSON</button>
+        <button id="imp-review">Import JSON…</button>
+        <input type="file" id="imp-file" accept="application/json,.json" hidden>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="active" id="active" hidden></div>
+
+<div class="ws" id="ws" data-tab="list">
+  <button class="rail" id="list-rail" aria-label="Show results list" hidden><span aria-hidden="true">›</span><span class="rail-t">Results</span></button>
+  <section class="pane" aria-label="Results">
+    <div class="search">
+      <input type="search" id="q" placeholder="Search pole id or street" aria-label="Search pole records by id, street, or coordinates" autocomplete="off" spellcheck="false">
+      <button class="btn sm" id="q-clear" aria-label="Clear search" hidden>Clear</button>
+    </div>
+    <div class="count" id="count" aria-live="polite"></div>
+    <div class="map-notice" id="map-notice" hidden></div>
+    <div class="list" id="list" role="listbox" aria-label="Pole records"></div>
+  </section>
+  <section class="mapwrap" id="mapwrap" aria-label="Map">
+    <div id="map"></div>
+    <div class="map-state" id="map-state" hidden></div>
+    <div class="map-tools"><button class="btn sm" id="fit">Fit results</button><button class="btn sm" id="resetview">Reset view</button></div>
+    <div class="legend" id="legend"></div>
+  </section>
+  <aside class="detail" id="detail" aria-label="Pole details" hidden></aside>
+</div>
+<footer class="foot"><span>Imagery and detections © Mapillary contributors, CC BY-SA 4.0. Derived data ODbL. Basemap © OpenStreetMap contributors. OSM pole comparison © OpenStreetMap contributors, ODbL.</span><span class="muted">Built by Selim Amrouni · <a href="#about">About</a></span></footer>
+
+<nav class="mobilebar" aria-label="View" role="tablist">
+  <button role="tab" id="tab-list" aria-selected="true" data-tab="list">List</button>
+  <button role="tab" id="tab-map" aria-selected="false" data-tab="map">Map</button>
+  <button id="filters-toggle" aria-expanded="false" aria-controls="toolbar">Filters</button>
+  <a href="#about">About</a>
+</nav>
+
+<dialog class="lb" id="lb" aria-label="Enlarged photo">
+  <div class="bar"><span id="lb-cap"></span><a id="lb-src" target="_blank" rel="noopener">Open source photo</a><button class="btn sm" id="lb-close" aria-label="Close enlarged photo">Close</button></div>
+  <img id="lb-img" alt="">
+</dialog>
+
+<dialog class="dlg" id="import-dlg" aria-labelledby="import-h">
+  <div class="dlg-h"><h2 id="import-h">Import review decisions</h2><button class="btn sm" id="import-close" aria-label="Close">Close</button></div>
+  <div class="dlg-b" id="import-body"></div>
+</dialog>
+
+<dialog class="dlg about" id="about-dlg" aria-labelledby="about-h">
+  <div class="dlg-h"><h2 id="about-h">About this demo</h2><button class="btn sm" id="about-close" aria-label="Close">Close</button></div>
+  <div class="dlg-b">
+    <p>I used public Mapillary photos to map poles in Marblehead, Massachusetts, identify visible equipment, and flag things worth checking. The aim is to see what is useful for an initial asset review, and where the photos are insufficient. Open a pole to see the photos and judge the result.</p>
+    <p class="notice">Experimental results. The model's assessments have not been independently verified.</p>
+
+    <h3>How it works</h3>
+    <ol>
+      <li><b>Find poles.</b> Mapillary detections identify candidate poles in public street photos.</li>
+      <li><b>Read the photos.</b> A vision model describes visible equipment and flags possible issues.</li>
+      <li><b>Check the result.</b> Open each record to review its photos, compare views, and record your assessment.</li>
+    </ol>
+    <details><summary>Technical details</summary>
+<ul>
+<li>Coverage: Mapillary vector tiles at zoom 14 for the bounding box -70.8990, 42.4295, -70.7536, 42.5288: 21,146 images and 11,465 map features, of which 4,327 are pole-like classes. Captures span 2011-10-21 to 2026-08-28 for the whole image pool; the dates shown on records are the dates of the photos actually assessed.</li>
+<li>Candidates: the 2,393 map features Mapillary classes as utility poles. Street lights and other classes are not fetched. Mapillary's utility-pole class also includes some street-light and signal poles; the model labels those and the page lists them under other detected objects.</li>
+<li>Photos: for each feature, its own detections are ranked by the polygon's area in the frame and the top 3 are fetched (3,069 photos). Panoramas at original resolution, other photos at 2048 px.</li>
+<li>Crops: the detection polygon's box, widened to 1.5 times the pole width or 0.3 times its height (at least 150 px each side), with 25% headroom above and 5% below, resized to at most 1200 px. Photos where the pole is under 150 px tall or 20 px wide are not assessed: 887 of 3,069 photos, leaving 2,182 assessed photos on 837 features.</li>
+<li>Model: claude-sonnet-5 through the Batches API, one crop per request, a fixed JSON schema (pole present, pole type, material, lean, crossarm, transformer, vegetation, attachment count, self-rating, note). The self-rating is not calibrated. Notes are free text and are shown only per photo under technical details.</li>
+<li>Records: photos of one feature are combined, then features that all lie within 8.0 m of each other are grouped into one record (no chaining: a hand check of 29 merged Reading records found 7 over-merges, worst in chains of features 25 to 30 m apart, so a merge now needs every pair within the radius) (177 of 609 records combine more than one feature). Each field takes the most common value across assessed photos, ties going to the more cautious value; exact vote counts are kept. Photos from one drive are correlated, so agreement across them is not independent verification. 43 records rest on a single photo.</li>
+<li>Photo shown: the newest assessed photo where the pole is at least 300 px tall, otherwise the largest. Its capture date is the record's representative date: the date filters, the "within 24 months" switch, ages, and the area's freshness summary all use it, and it can be older than the latest photo available (linked separately). The record's fields combine all assessed photos, which can include older ones than the photo shown; each flag lists the dated photos that show it. The latest available photo, assessed or not, is listed separately.</li>
+<li>Positions on photos: a second model pass (same model, one request per assessed photo) was given the crop with a faint labeled grid and the earlier assessment, and asked for the position of the pole top and base, each counted attachment, the transformer, crossarm damage, and vegetation contact. These are approximate model estimates of where something appears in the photo, shown as markers you can hide. They are not measurements and were not verified.</li>
+<li>Apparent tilt: for each assessed photo, the angle of Mapillary's pole outline from the image vertical (medial axis of the outline, 12 scanlines, least squares). It is a property of the photo, not a measurement of the pole: camera roll, perspective, and a lean toward or away from the camera all distort it. Flat photos the model called straight read a median of 2.3° and up to 5.3° at the 90th percentile (704 photos); panoramas read noisier.</li>
+<li>Push braces: a support pole set at a steep angle against a straight pole is a common Mapillary utility-pole detection and reads as a severe lean. The model labels these as push braces, listed under other detected objects and never flagged for lean. For Greenpoint and Hardwick the label was applied by resending only the photos the first pass had called moderate or severe (schema 2, 2026-09-16); later territories use it throughout.</li>
+<li>OpenStreetMap: Overpass returned 169 pole nodes (power=pole or man_made=utility_pole) in the same bounding box. 30 of the 582 utility poles here have one within 15 m (15 within 8 m, 44 within 25 m), so 552 are absent from OSM at 15 m; 143 OSM poles have no detected pole within 15 m (off the photographed streets, or missed). Positions on both sides are approximate. Fetched 2026-09-17.</li>
+<li>Possible condition issue: lean moderate or severe, or crossarm damaged, or vegetation touching. Watch item: slight lean, one tier below an issue; it is common (225 of 582 utility poles) and often within the noise of camera angle. Transformers and attachment counts are not condition issues. Attachment count is the number of visible non-electric items the model counted on the pole; it does not identify owners, tenants, or billing status. Coordinates are averaged detection positions, not surveyed.</li>
+</ul></details>
+
+    <h3>What the counts mean</h3>
+    <div id="about-counts"></div>
+
+    <h3>What the photos cannot establish</h3>
+    <p>Photos cannot establish structural condition, electrical loading, ownership, or compliance. Old images, camera angles, and obstructions can mislead the model. A record with no flag has not been inspected. The OpenStreetMap comparison only says which poles OSM volunteers have mapped; it is not the utility's own records, and OSM pole coverage is sparse in most towns.</p>
+    
+
+    <h3>Filters and review</h3>
+    <p>One flag filter applies at a time; the search box, the photo date, the review status, and the extra options narrow it further. Search matches a record id, the nearest named road where the build found one, and a typed "latitude, longitude". "Reviewed" means every flag on the record has a decision; a note alone does not count. Decisions are saved in this browser only and go into the filtered exports as separate review columns, with unreviewed left blank.</p>
+
+    <h3>Validation</h3>
+    <p>No completed validation results are published for this demo.</p>
+
+    <h3>Try another area</h3><p>Have an area in mind? Send me the town or service territory. I'll check the available imagery.</p><p><a class="btn primary" href="mailto:selim.amrouni@gmail.com">Ask about another area</a></p>
+    <p class="meta">Generated 2026-09-19 · dataset <span class="mono">344c06b3</span> · counts are model estimates · Imagery and detections © Mapillary contributors, CC BY-SA 4.0. Derived data ODbL. Basemap © OpenStreetMap contributors. OSM pole comparison © OpenStreetMap contributors, ODbL.</p>
+  </div>
+</dialog>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" onerror="window.__maplibreFailed=true"></script>
+<script src="predicates.js?v=17cb337d"></script>
+<script src="data.js?v=17cb337d"></script>
+<script src="app.js?v=17cb337d"></script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+{
+ "slug": "marblehead-massachusetts",
+ "location": "Marblehead, Massachusetts",
+ "version": "344c06b3",
+ "generated": "2026-09-19",
+ "example": {
+  "id": "marb-00282",
+  "crop": "crops/843980090181831.jpg",
+  "date": "2023-08",
+  "ts": 1692471889013,
+  "url": "https://www.mapillary.com/app/?pKey=843876230192217&focus=photo",
+  "by": "BobEisenman",
+  "flags": [
+   "double"
+  ],
+  "type": "wood_utility",
+  "marks": {
+   "top": [
+    0.62,
+    0
+   ],
+   "base": [
+    0.38,
+    0.79
+   ],
+   "att": [],
+   "xfmr": null
+  }
+ },
+ "shown_by_month": {
+  "2023-08": 165,
+  "2023-11": 186,
+  "2024-06": 1,
+  "2025-11": 230
+ },
+ "undated": 0,
+ "counts": {
+  "records": 609,
+  "utility": 582,
+  "doubles": 27,
+  "condition_issues": 231,
+  "warnings": 225,
+  "frames_classified": 2182,
+  "photo_year_first": 2023,
+  "photo_year_last": 2025,
+  "multi_year": 12,
+  "not_in_osm": 552,
+  "osm_nodes": 169
+ },
+ "coverage": {
+  "images": 21146,
+  "area_km2": 131.04,
+  "capture_first": "2011-10-21",
+  "capture_last": "2026-08-28"
+ },
+ "sources": {
+  "poles": "data/poles/marblehead-massachusetts/summary.json",
+  "coverage": "data/coverage/marblehead-massachusetts/summary.json",
+  "osm": "data/osm/marblehead-massachusetts/summary.json"
+ }
+}
