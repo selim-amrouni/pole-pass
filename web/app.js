@@ -129,6 +129,10 @@
     $('year-min').value = Y0 ?? ''; $('year-max').value = Y1 ?? ''; ['recent', 'other', 'years', 'osm'].forEach(id => { $(id).checked = false; });
     $('q').value = ''; $('q-clear').hidden = true;
     readYearInputs(); refresh();
+    // Every Reset writes the URL, not just the one in the More-filters popover. The three others
+    // (count row, empty state, active-filter bar) used to leave the old issue -- and now the old
+    // query -- in the hash, so a reload brought back the filter the reader had just cleared.
+    writeHash(false);
   }
   function activeFilters() {
     const out = [];
@@ -747,7 +751,7 @@
     ['year-min', 'year-max'].forEach(id => $(id).addEventListener('change', () => { state.recent = false; $('recent').checked = false; readYearInputs(); refresh(); }));
     $('recent').addEventListener('change', e => { state.recent = e.target.checked; readYearInputs(); refresh(); });
     $('sort').addEventListener('change', e => { state.sort = e.target.value; refresh(); });
-    $('reset').addEventListener('click', () => { resetFilters(); writeHash(false); closeMenus(); });
+    $('reset').addEventListener('click', () => { resetFilters(); closeMenus(); });
     $('more-done').addEventListener('click', () => { closeMenus(); $('more-btn').focus(); });
     // Search composes with every other filter through applyFilters, so it needs no special casing
     // beyond keeping the field, the URL and the Clear button in step.
