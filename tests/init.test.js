@@ -19,7 +19,7 @@ function boot(hash = '', width = 1440, extra = {}) {
   const setUrl = url => { const i = url.indexOf('#'); window.location.hash = i >= 0 ? url.slice(i) : ''; };
   const history = { replaceState: (s, t, url) => setUrl(url), pushState: (s, t, url) => setUrl(url) };
   const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
-  window.POLE_DATA = win.POLE_DATA;
+  window.POLE_DATA = extra.data || win.POLE_DATA;
   const app = fs.readFileSync(path.join(OUT, 'app.js'), 'utf8');
   const URLStub = extra.URL || { createObjectURL: () => 'blob:' };
   const BlobStub = extra.Blob || class {};
@@ -261,16 +261,44 @@ test('a deep link with an issue context opens the record inside that filtered se
   assert.equal(bogus.PP.state.flag, 'all');
 });
 
-test('the URL and Copy link carry the issue context; a bare #pole= link still works', () => {
+test('every view round-trips through the URL, including All poles', () => {
   const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
   const target = win.POLE_DATA.records.find(r => r.util && r.veg === 'touching');
+  const util = win.POLE_DATA.records.filter(r => r.util).length;
   const { window, PP } = boot();
   PP.state.flag = 'veg'; PP.refresh();
   PP.select(target.id);
   assert.equal(window.location.hash, `#pole=${target.id}&issue=veg`);
+  // "All poles" must be writable. It used to be the one view with no representation, so a link
+  // copied from it reopened as the Any-issue default and Back landed on a different result set.
   PP.state.flag = 'all'; PP.refresh();
   PP.select(target.id);
-  assert.equal(window.location.hash, `#pole=${target.id}`, 'no issue filter leaves the hash as it was before');
+  assert.equal(window.location.hash, `#pole=${target.id}&issue=all`);
+  assert.equal(boot(`#pole=${target.id}&issue=all`).PP.filtered.length, util, 'the recipient sees All poles');
+  // With no record open, All poles still writes itself; the default view stays a clean URL.
+  const b = boot();
+  b.PP.state.flag = 'all'; b.PP.refresh(); b.PP.close();
+  assert.equal(b.window.location.hash, '#issue=all');
+  const c = boot();
+  c.PP.state.flag = 'any'; c.PP.refresh(); c.PP.close();
+  assert.equal(c.window.location.hash, '', 'the default needs no hash');
+  // A bare #pole= link, the older shape, still opens the record under All poles.
+  const legacy = boot(`#pole=${target.id}`);
+  assert.equal(legacy.PP.state.selected, target.id);
+  assert.equal(legacy.PP.state.flag, 'all');
+  assert.equal(legacy.PP.filtered.length, util);
+});
+
+test('an area with no condition issues opens on all poles rather than an empty list', () => {
+  const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
+  const PPred = require('../web/predicates.js');
+  // Strip every condition flag: a thin result is a valid outcome for an area, not a bug.
+  const stripped = JSON.parse(JSON.stringify(win.POLE_DATA));
+  stripped.records.forEach(r => { r.lean = r.lean === 'slight' ? 'slight' : 'none'; r.xarm = 'none_visible'; r.veg = 'none'; delete r.dbl; });
+  assert.equal(stripped.records.filter(PPred.isUtility).filter(PPred.FILTERS.any).length, 0);
+  const { PP } = boot('', 1440, { data: stripped });
+  assert.equal(PP.state.flag, 'all', 'the default degrades instead of showing nothing');
+  assert.equal(PP.filtered.length, stripped.records.filter(PPred.isUtility).length);
 });
 
 test('a double-pole record leads with the double, not with the transformer line', () => {

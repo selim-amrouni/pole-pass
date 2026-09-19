@@ -468,7 +468,7 @@ def main():
     rows = build_records(poles, out_dir, load_polygons(slug), marks, osm_dist if osm_meta else None, streets)
     named = sum(1 for r in rows if r.get("st"))
     print(f"nearest named road for {named} of {len(rows)} records"
-          + ("" if streets else "  (no data/osm/<slug>/roads.json; run roadcover.py to add street names)"))
+          + ("" if streets else "  (no data/osm/<slug>/roads.json; run 'roadcover.py --town <town> --roads-only' to add street names)"))
     n_partner = partner_boxes(slug, rows)
     n_dbl = publish_double_crops(slug, out_dir, rows)
     version = hashlib.sha1(json.dumps([{k: v for k, v in r.items() if k not in ("shown", "frames")} for r in rows], sort_keys=True).encode()).hexdigest()[:8]

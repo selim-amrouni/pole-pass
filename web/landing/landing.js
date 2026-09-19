@@ -27,7 +27,7 @@
   function cardHtml(t, now, best) {
     const s = t.stats || {}, c = s.counts || {};
     const kind = KIND[t.kind] ? `<span class="kind ${esc(t.kind)}">${esc(KIND[t.kind])}</span>` : '';
-    const badge = best ? '<span class="badge">Best imagery</span>' : '';
+    const badge = best ? `<span class="badge" title="Largest share of photos taken within ${RECENT_MONTHS} months">Best imagery</span>` : '';
     const pic = s.example && s.example.crop ? `<img src="${esc(`${encodeURIComponent(t.slug)}/${s.example.crop}`)}" alt="Street photo of a pole in ${esc(t.name || t.slug)}, ${esc(s.example.date || 'date unknown')}" loading="lazy" onerror="this.parentNode.classList.add('nophoto');this.remove()"><span class="ph" hidden>Photo unavailable</span>`
       : '<span class="ph">No photo published</span>';
     const fr = freshness(s, now);
@@ -45,9 +45,13 @@
   // computed here from the same freshness() the cards print. Never hand-assigned, so it follows the
   // data instead of going stale. No badge when nothing has any recent imagery to be best at.
   function bestImagery(list, now) {
-    let best = null, top = 0;
-    list.forEach(t => { const sh = freshness(t.stats || {}, now).share; if (Number.isFinite(sh) && sh > top) { top = sh; best = t.slug; } });
-    return best;
+    let best = null, top = 0, tied = false;
+    list.forEach(t => {
+      const sh = freshness(t.stats || {}, now).share;
+      if (!Number.isFinite(sh) || sh <= 0) return;
+      if (sh > top) { top = sh; best = t.slug; tied = false; } else if (sh === top) { tied = true; }
+    });
+    return tied ? null : best;   // a tie would claim a difference the numbers do not show
   }
   function render(list, el, now) {
     const ok = Array.isArray(list) ? list.filter(t => t && typeof t.slug === 'string' && t.slug) : [];
@@ -81,10 +85,15 @@
     const flagNote = ex.flags && ex.flags.length ? 'Model flags on this record have not been verified.' : 'No condition flagged on this record.';
     // Say what the reader can see in the picture. The old caption led with the absence of a flag,
     // which reads as "nothing found" on the one example the homepage gets to show.
-    const shown = [keys.some(k => k[0] === 'xfmr') && 'a transformer',
-                   atts.length && `${atts.length} attachment${atts.length > 1 ? 's' : ''}`,
-                   (ex.flags || []).length && `${ex.flags.length} possible condition flag${ex.flags.length > 1 ? 's' : ''}`].filter(Boolean);
-    const found = shown.length ? `Model identified ${shown.join(' and ')} on this pole. ` : '';
+    // Count what the model found, not how many markers fitted: `atts` is clipped by the three-mark
+    // render budget above, and the sentence is a claim about the model rather than about the figure.
+    const nAtt = (m.att || []).filter(a => a && a.p).length;
+    const nFlag = (ex.flags || []).length;
+    const shown = [m.xfmr && 'a transformer',
+                   nAtt && `${nAtt} attachment${nAtt > 1 ? 's' : ''}`,
+                   nFlag && `${nFlag} possible condition flag${nFlag > 1 ? 's' : ''}`].filter(Boolean);
+    const phrase = shown.length < 2 ? shown.join('') : `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`;
+    const found = shown.length ? `Model identified ${phrase} on this pole. ` : '';
     cap.innerHTML = `${esc(found)}${esc(t.name)} · photo ${esc(ex.date || 'date unknown')}${ex.by ? ` by ${esc(ex.by)}` : ''} · <a href="${encodeURIComponent(t.slug)}/#pole=${encodeURIComponent(ex.id)}">Open this record</a><br><span class="small">Markers are model observations, not measurements. ${flagNote} Photo © Mapillary contributors, CC BY-SA 4.0${ex.url ? ` · <a href="${esc(ex.url)}" target="_blank" rel="noopener">source</a>` : ''}.</span>`;
     return t.slug;
   }
@@ -95,7 +104,9 @@
   function forwardPoleLink(list, loc) {
     const m = /[#&]pole=([^&]*)/.exec(loc.hash || '');
     if (!m || !Array.isArray(list) || !list.length) return null;
-    const prefix = decodeURIComponent(m[1]).slice(0, 4).toLowerCase();
+    let id = m[1];
+    try { id = decodeURIComponent(id); } catch (e) { /* malformed escape: match on the raw text */ }
+    const prefix = id.slice(0, 4).toLowerCase();
     const t = list.find(x => x && typeof x.slug === 'string' && x.slug.slice(0, 4).toLowerCase() === prefix) || list[0];
     return `${encodeURIComponent(t.slug)}/${loc.hash}`;
   }

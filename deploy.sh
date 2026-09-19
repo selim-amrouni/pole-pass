@@ -13,7 +13,7 @@
 # Layout on Pages: /<slug>/ per territory; /index.html, /landing.css, /landing.js from web/landing/;
 # /territories.json = the deployed slugs from web/territories.json (name, kind) plus each bundle's
 # summary.json under "stats", which the landing page renders as cards. #pole= links on the root
-# are forwarded to the first slug by landing.js.
+# are forwarded by landing.js to the area named by the id prefix.
 set -euo pipefail
 # Loud on failure: this script is usually run with its output piped, and a pipeline without
 # `pipefail` in the CALLER's shell reports the exit code of `tail`, not of this script. A deploy

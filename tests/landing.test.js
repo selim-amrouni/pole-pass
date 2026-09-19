@@ -109,13 +109,22 @@ test('a root #pole= link goes to the area its id names, not to whichever card is
   assert.equal(PL.forwardPoleLink(LIST, { hash: '#pole=hard-00001&issue=any' }), 'hardwick-vermont/#pole=hard-00001&issue=any');
   // An id from no known area still lands somewhere rather than dropping the link.
   assert.equal(PL.forwardPoleLink(LIST, { hash: '#pole=zzzz-1' }), 'greenpoint-brooklyn-new-york/#pole=zzzz-1');
+  // A malformed percent-escape must not throw: decodeURIComponent('%') does, and this runs inside
+  // the fetch .then(), so the rejection reached the catch and rendered "No areas are published yet"
+  // over a site that has five. An empty state is a claim here, so it must never be an accident.
+  assert.doesNotThrow(() => PL.forwardPoleLink(LIST, { hash: '#pole=%' }));
+  assert.equal(PL.forwardPoleLink(LIST, { hash: '#pole=%E0%A4%A' }), 'greenpoint-brooklyn-new-york/#pole=%E0%A4%A');
+  assert.equal(PL.forwardPoleLink(LIST, { hash: '#pole=read%2D00070' }), 'reading-massachusetts/#pole=read%2D00070', 'a valid escape still decodes');
 });
 
 test('the hero caption says what the model found instead of leading with an absence', () => {
   const { PL, document } = boot();
   const frame = document.getElementById('hero-frame'), cap = document.getElementById('hero-cap');
   PL.renderHero([LIST[0]], frame, cap);
-  assert.match(cap.innerHTML, /Model identified a transformer and 1 attachment on this pole/);
+  // The fixture has three attachments and a transformer; only one attachment circle fits inside the
+  // three-mark render budget. The caption must report the finding, not the number of markers drawn.
+  assert.equal((frame.innerHTML.match(/class="mk att"/g) || []).length, 1, 'one circle drawn');
+  assert.match(cap.innerHTML, /Model identified a transformer and 3 attachments on this pole/);
   assert.match(cap.innerHTML, /Markers are model observations, not measurements/, 'the caveat stays');
   assert.match(cap.innerHTML, /Mapillary/, 'attribution stays');
   assert.ok(!/No flagged condition/.test(cap.innerHTML));

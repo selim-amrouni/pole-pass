@@ -50,7 +50,7 @@
   // ---------- state ----------
   // First visit to an area opens on the poles that have a condition issue; All poles is one chip
   // away. A URL that already carries state (a shared record or issue) always wins over this.
-  const DEFAULT_FLAG = 'any';
+  const DEFAULT_FLAG_PREF = 'any';
   const state = { flag: 'all', q: '', yearMin: null, yearMax: null, recent: false, review: 'all', other: false, years: false, osm: false, sort: 'date_desc', page: 1,
     selected: null, viewing: null, compare: false, colorMode: 'condition', tab: 'list', example: false, outline: true, markers: true, badges: true, now: Date.now(), reviews: null, listOpen: true };
   const PAGE = 20;
@@ -58,6 +58,10 @@
   const yearsAll = D.records.filter(PP.isUtility).map(r => r.shown.year).filter(y => y != null);
   const Y0 = yearsAll.length ? Math.min(...yearsAll) : null, Y1 = yearsAll.length ? Math.max(...yearsAll) : null;
   let filtered = [], mapApi = null;
+  // ...unless this area has none, in which case opening on an empty list would say nothing. An area
+  // with no condition issues is a real result here, not a bug (coverage.py treats thin data the
+  // same way), so the first view falls back to the whole inventory.
+  const DEFAULT_FLAG = D.records.filter(PP.isUtility).some(PP.FILTERS.any) ? DEFAULT_FLAG_PREF : 'all';
 
   // ---------- review decisions (local to this browser, scoped to the dataset version) ----------
   const RKEY = `polepass-review:${D.meta.slug}:${D.meta.version}`;
@@ -196,10 +200,17 @@
   function hashFor(id, flag) {
     const parts = [];
     if (id) parts.push(`pole=${encodeURIComponent(id)}`);
-    if (flag && flag !== 'all') parts.push(`issue=${encodeURIComponent(flag)}`);
+    // The flag is written whenever anything else is, and whenever it differs from the default, so
+    // every view round-trips -- including All poles, which previously had no representation at all
+    // and so came back as the default for anyone following the link.
+    if (id || state.q || flag !== DEFAULT_FLAG) parts.push(`issue=${encodeURIComponent(flag || 'all')}`);
     if (state.q) parts.push(`q=${encodeURIComponent(state.q)}`);
     return parts.length ? '#' + parts.join('&') : '';
   }
+  // The one rule for turning a parsed hash into a filter, shared by first load and by popstate.
+  // An explicit issue wins; a bare "#pole=" link (the older link shape) opens under All poles so
+  // the record cannot be filtered out of its own list; an empty hash is a first visit.
+  const flagFor = h => h.issue || (h.pole ? 'all' : DEFAULT_FLAG);
   const shareUrl = () => location.origin + location.pathname + location.search + hashFor(state.selected, state.flag);
   function writeHash(push) {
     const url = location.pathname + location.search + hashFor(state.selected, state.flag);
@@ -216,7 +227,7 @@
   // Back and forward move between application states rather than leaving the page.
   function syncFromHash() {
     const h = parseHash();
-    const flag = h.issue || 'all';
+    const flag = flagFor(h);
     const qChanged = h.q !== state.q;
     if (qChanged) { state.q = h.q; $('q').value = h.q; $('q-clear').hidden = !h.q; }
     if (flag !== state.flag || qChanged) { state.flag = flag; refresh(true); }
@@ -440,7 +451,14 @@
     const primary = `<div class="primary">
         <div class="ctx">${ctx}</div>
         <div class="lead">${leadChip}</div>
-        ${(() => { const place = placeLabel(r); return place ? `<div class="place">${esc(place)}</div>` : ''; })()}
+        ${(() => {
+          const place = placeLabel(r);
+          if (!place) return '';
+          const how = r.dbl && r.dbl.street ? 'Streets named by the double-pole pass'
+            : Number.isFinite(r.st_m) ? `Nearest named road, about ${Math.round(r.st_m)} m from the estimated position`
+            : '';
+          return `<div class="place"${how ? ` title="${esc(how)}"` : ''}>${esc(place)}</div>`;
+        })()}
         <div class="where"><span class="mono">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span><span>Photo: <b>${esc(longDate(r.shown))}</b></span>${mapsLinks(r)}</div>
         ${also.length ? `<div class="also"><span class="lbl">Also found:</span>${also.map(k => `<span class="flag ${flagCls(k)}">${esc(L.flag[k])}</span>`).join('')}</div>` : ''}
       </div>`;
@@ -758,7 +776,6 @@
     const setQuery = (v, focus) => {
       state.q = v; $('q').value = v; $('q-clear').hidden = !v;
       refresh(); writeHash(false);
-      if (state.selected) renderDetail();
       if (focus) $('q').focus();
     };
     state.setQuery = setQuery;
@@ -867,8 +884,7 @@
     // The issue context is applied BEFORE the first refresh, so a shared link opens its record
     // inside the result set it was shared from ("3 of 27") rather than inside all poles.
     const h = parseHash();
-    if (h.issue) state.flag = h.issue;
-    else if (!h.pole) state.flag = DEFAULT_FLAG;   // a shared #pole= link must not be filtered out of its own list
+    state.flag = flagFor(h);
     if (h.q) { state.q = h.q; $('q').value = h.q; $('q-clear').hidden = false; }
     refresh();
     if (h.pole) {
