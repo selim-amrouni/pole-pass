@@ -9,7 +9,7 @@ const { makeDocument, El } = require('./fakedom.js');
 const OUT = path.join(__dirname, '..', 'out', 'greenpoint-brooklyn-new-york');
 const IDS = ['summary', 'dates-label|span', 'territory|select', 'loc-name|span', 'kind|span', 'toolbar', 'filters-toggle|button', 'tab-list|button', 'tab-map|button', 'chips', 'dates-btn|button', 'dates-menu', 'year-min|input', 'year-max|input', 'recent|input', 'other|input', 'years|input', 'years-n|span', 'osm-wrap|label', 'osm|input', 'osm-n|span', 'reset|button', 'sort|select', 'export-btn|button', 'export-menu', 'exp-csv-f|button', 'exp-geo-f|button', 'exp-review|button', 'imp-review|button', 'imp-file|input', 'ws', 'count', 'list', 'mapwrap|section', 'map', 'map-state', 'fit|button', 'resetview|button', 'legend', 'detail|aside', 'lb|dialog', 'lb-cap|span', 'lb-src|a', 'lb-close|button', 'lb-img|img',
   'map-notice', 'chips-eq', 'chips-more', 'g-issues|div|filters', 'g-equip|div|filters', 'g-review|div|filters', 'review-seg|span', 'review-n|span', 'recent-n|span', 'more-btn|button', 'more-menu', 'more-fold', 'active', 'import-dlg|dialog', 'import-body', 'import-close|button', 'about-dlg|dialog', 'about-close|button',
-  'notice-btn|button', 'filters', 'more-n|span', 'more-done|button', 'list-rail|button', 'about-counts'];
+  'notice-btn|button', 'filters', 'more-n|span', 'more-done|button', 'list-rail|button', 'about-counts', 'q|input', 'q-clear|button'];
 
 function boot(hash = '', width = 1440, extra = {}) {
   const document = makeDocument(IDS.map(s => s.split('|')));
@@ -19,7 +19,7 @@ function boot(hash = '', width = 1440, extra = {}) {
   const setUrl = url => { const i = url.indexOf('#'); window.location.hash = i >= 0 ? url.slice(i) : ''; };
   const history = { replaceState: (s, t, url) => setUrl(url), pushState: (s, t, url) => setUrl(url) };
   const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
-  window.POLE_DATA = win.POLE_DATA;
+  window.POLE_DATA = extra.data || win.POLE_DATA;
   const app = fs.readFileSync(path.join(OUT, 'app.js'), 'utf8');
   const URLStub = extra.URL || { createObjectURL: () => 'blob:' };
   const BlobStub = extra.Blob || class {};
@@ -34,11 +34,19 @@ test('initializes without maplibregl: fallback shown, list and count rendered, n
   assert.equal(document.getElementById('map-state').hidden, false);
   assert.equal(document.getElementById('ws').classList.contains('map-failed'), true, 'the list reclaims the space');
   assert.equal(document.getElementById('legend').hidden, true);
-  const util = window.POLE_DATA.records.filter(r => r.util).length;
-  assert.match(document.getElementById('count').innerHTML, new RegExp(`of <span class="mono">${util}</span>`));
-  assert.equal(document.getElementById('list').querySelectorAll('.row').length, Math.min(20, util));
+  // A first visit with no URL state opens on the poles that have a condition issue.
+  const PPred = require('../web/predicates.js');
+  const issues = window.POLE_DATA.records.filter(r => r.util && PPred.hasConditionIssue(r)).length;
+  assert.equal(PP.state.flag, 'any');
+  assert.equal(PP.filtered.length, issues);
+  assert.match(document.getElementById('count').innerHTML, new RegExp(`of <span class="mono">${issues}</span>`));
+  assert.equal(document.getElementById('list').querySelectorAll('.row').length, Math.min(20, issues));
   assert.equal(PP.state.selected, null, 'no record opens by default; the map is the first view');
   assert.equal(document.getElementById('ws').classList.contains('has-detail'), false);
+  // All poles stays one click away and is the whole population.
+  const util = window.POLE_DATA.records.filter(r => r.util).length;
+  document.getElementById('chips').querySelectorAll('.chip').find(c => c.dataset.f === 'all').click();
+  assert.equal(PP.filtered.length, util);
 });
 
 test('filters change list, count, and filtered export together', () => {
@@ -96,7 +104,7 @@ test('prev/next move within the filtered list and single-photo records say so', 
 });
 
 test('multi-year filter keeps records photographed in 2+ years; compare pairs the farthest photos in time', () => {
-  const { document, PP, window } = boot();
+  const { document, PP, window } = boot('#issue=all');
   const n = window.POLE_DATA.records.filter(r => r.util && new Set(r.frames.map(f => f.year).filter(y => y != null)).size >= 2).length;
   const cb = document.getElementById('years'); cb.checked = true; cb.dispatch('change');
   assert.equal(PP.filtered.length, n);
@@ -143,7 +151,7 @@ test('territory selector appears only when a territories.json lists this bundle'
 });
 
 test('review filter narrows to reviewable, unreviewed records; reviewed is empty with no decisions', () => {
-  const { document, PP, window } = boot();
+  const { document, PP, window } = boot('#issue=all');
   PP.state.review = 'unreviewed';
   PP.refresh();
   const expected = window.POLE_DATA.records.filter(r => window.PP.isUtility(r) && window.PP.reviewableFlags(r).length > 0);
@@ -206,7 +214,7 @@ test('CSV export includes review columns; decided rows show reviewed/partial, un
   let captured = null;
   class FakeBlob { constructor(parts, opts) { this.text = parts.join(''); this.type = opts && opts.type; } }
   const FakeURL = { createObjectURL: b => { captured = b; return 'blob:'; } };
-  const { document } = boot('', 1440, { storage, Blob: FakeBlob, URL: FakeURL });
+  const { document } = boot('#issue=all', 1440, { storage, Blob: FakeBlob, URL: FakeURL });
   document.getElementById('exp-csv-f').click();
   assert.ok(captured, 'download() built a Blob and asked for an object URL');
   const lines = captured.text.split('\n');
@@ -253,16 +261,44 @@ test('a deep link with an issue context opens the record inside that filtered se
   assert.equal(bogus.PP.state.flag, 'all');
 });
 
-test('the URL and Copy link carry the issue context; a bare #pole= link still works', () => {
+test('every view round-trips through the URL, including All poles', () => {
   const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
   const target = win.POLE_DATA.records.find(r => r.util && r.veg === 'touching');
+  const util = win.POLE_DATA.records.filter(r => r.util).length;
   const { window, PP } = boot();
   PP.state.flag = 'veg'; PP.refresh();
   PP.select(target.id);
   assert.equal(window.location.hash, `#pole=${target.id}&issue=veg`);
+  // "All poles" must be writable. It used to be the one view with no representation, so a link
+  // copied from it reopened as the Any-issue default and Back landed on a different result set.
   PP.state.flag = 'all'; PP.refresh();
   PP.select(target.id);
-  assert.equal(window.location.hash, `#pole=${target.id}`, 'no issue filter leaves the hash as it was before');
+  assert.equal(window.location.hash, `#pole=${target.id}&issue=all`);
+  assert.equal(boot(`#pole=${target.id}&issue=all`).PP.filtered.length, util, 'the recipient sees All poles');
+  // With no record open, All poles still writes itself; the default view stays a clean URL.
+  const b = boot();
+  b.PP.state.flag = 'all'; b.PP.refresh(); b.PP.close();
+  assert.equal(b.window.location.hash, '#issue=all');
+  const c = boot();
+  c.PP.state.flag = 'any'; c.PP.refresh(); c.PP.close();
+  assert.equal(c.window.location.hash, '', 'the default needs no hash');
+  // A bare #pole= link, the older shape, still opens the record under All poles.
+  const legacy = boot(`#pole=${target.id}`);
+  assert.equal(legacy.PP.state.selected, target.id);
+  assert.equal(legacy.PP.state.flag, 'all');
+  assert.equal(legacy.PP.filtered.length, util);
+});
+
+test('an area with no condition issues opens on all poles rather than an empty list', () => {
+  const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
+  const PPred = require('../web/predicates.js');
+  // Strip every condition flag: a thin result is a valid outcome for an area, not a bug.
+  const stripped = JSON.parse(JSON.stringify(win.POLE_DATA));
+  stripped.records.forEach(r => { r.lean = r.lean === 'slight' ? 'slight' : 'none'; r.xarm = 'none_visible'; r.veg = 'none'; delete r.dbl; });
+  assert.equal(stripped.records.filter(PPred.isUtility).filter(PPred.FILTERS.any).length, 0);
+  const { PP } = boot('', 1440, { data: stripped });
+  assert.equal(PP.state.flag, 'all', 'the default degrades instead of showing nothing');
+  assert.equal(PP.filtered.length, stripped.records.filter(PPred.isUtility).length);
 });
 
 test('a double-pole record leads with the double, not with the transformer line', () => {
@@ -332,4 +368,43 @@ test('unfolding restores the filter groups in their markup order, not the order 
   assert.deepEqual(ids(filters), ['g-issues']);
   PP.state.sizeWs();   // re-runs foldToolbar, which unfolds whatever now fits
   assert.deepEqual(ids(filters), ['g-issues', 'g-equip', 'g-review']);
+});
+
+test('search filters the list, survives a record round trip in the URL, and clears', () => {
+  const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
+  const target = win.POLE_DATA.records.find(r => r.util);
+  const stem = target.id.slice(0, 7);
+  const { document, PP, window } = boot('#issue=all');
+  const expected = win.POLE_DATA.records.filter(r => r.util && r.id.includes(stem)).length;
+  PP.state.setQuery(stem);
+  assert.equal(PP.filtered.length, expected);
+  assert.equal(document.getElementById('q').value, stem);
+  assert.equal(document.getElementById('q-clear').hidden, false);
+  assert.match(window.location.hash, new RegExp(`q=${stem}`));
+  assert.match(document.getElementById('active').innerHTML, /matching/);
+  // The query stays in the URL alongside the record, so returning from a record keeps the search.
+  PP.select(PP.filtered[0].id);
+  assert.match(window.location.hash, new RegExp(`^#pole=${PP.filtered[0].id}.*q=${stem}$`));
+  // Nothing matches: an empty state, not an error.
+  PP.state.setQuery('zzzz-no-such-record');
+  assert.equal(PP.filtered.length, 0);
+  assert.match(document.getElementById('list').innerHTML, /No poles match these filters/);
+  document.getElementById('q-clear').click();
+  assert.equal(PP.state.q, '');
+  assert.equal(document.getElementById('q-clear').hidden, true);
+  assert.ok(PP.filtered.length > 0);
+});
+
+test('the inspector offers one exit and one sidebar toggle, and the toggle says what it does', () => {
+  const win = {}; new Function('window', fs.readFileSync(path.join(OUT, 'data.js'), 'utf8'))(win);
+  const { document, PP } = boot('#issue=all');
+  PP.select(PP.filtered[0].id);
+  const labels = document.getElementById('detail').querySelectorAll('.detail-h button').map(b => b.textContent.trim());
+  assert.ok(labels.includes('← Back to results'));
+  assert.ok(labels.includes('Hide results'), 'the toggle names the action');
+  assert.ok(!labels.includes('Close'), 'the third, redundant exit is gone');
+  assert.ok(!labels.includes('List'), 'and it no longer just says "List"');
+  document.getElementById('list-toggle').click();
+  assert.equal(document.getElementById('detail').querySelectorAll('#list-toggle')[0].textContent.trim(), 'Show results');
+  assert.equal(PP.state.selected, PP.state.selected, 'the record stays open while the sidebar is hidden');
 });

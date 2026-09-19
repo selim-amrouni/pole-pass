@@ -25,6 +25,7 @@ denominator.
 """
 import argparse
 import json
+import math
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -84,6 +85,68 @@ def kept_ways(raw):
             continue
         out.append({"id": el["id"], "name": tags.get("name"), "coords": coords})
     return out
+
+
+# ---------------------------------------------------------------- nearest named street
+# doubles.py's nearest_named_way() scans every way for every point, which is fine for the few dozen
+# candidate pairs it runs on and far too slow for every pole in a town (Reading: 1,739 poles against
+# thousands of ways). Same answer, bucketed into a grid so each lookup only tests nearby segments.
+STREET_CELL_M = 250.0
+# A pole is normally within a few tens of metres of the road it stands along. Past this we say
+# nothing rather than name a road the pole is not actually on: "near X" is a proximity statement,
+# and a wrong one is worse than none.
+STREET_MAX_M = 60.0
+
+
+def street_index(ways, cell_m=STREET_CELL_M):
+    """Grid index over named-way segments for repeated nearest-street lookups.
+
+    ways: kept_ways() rows. Returns an object to pass to nearest_street()."""
+    named = [w for w in ways if w.get("name")]
+    lats = [c[1] for w in named for c in w["coords"]]
+    lat0 = sum(lats) / len(lats) if lats else 0.0
+    dlat = cell_m / 111320.0
+    dlon = cell_m / max(1.0, 111320.0 * math.cos(math.radians(lat0)))
+    cells = defaultdict(list)
+    for w in named:
+        name, coords = w["name"], w["coords"]
+        for a, b in zip(coords, coords[1:]):
+            lo_x, hi_x = sorted((a[0], b[0]))
+            lo_y, hi_y = sorted((a[1], b[1]))
+            for ix in range(int(lo_x / dlon), int(hi_x / dlon) + 1):
+                for iy in range(int(lo_y / dlat), int(hi_y / dlat) + 1):
+                    cells[(ix, iy)].append((name, a, b))
+    return {"cells": cells, "dlon": dlon, "dlat": dlat, "cell_m": cell_m}
+
+
+def nearest_street(idx, lon, lat, max_m=STREET_MAX_M):
+    """(name, distance_m) of the nearest named road within max_m, else (None, None).
+
+    Only the 3x3 cell neighbourhood is searched, which is exhaustive precisely while max_m does not
+    exceed the cell size -- a larger radius would silently miss segments in the next ring out."""
+    if not idx or not idx["cells"]:
+        return None, None
+    if max_m > idx["cell_m"]:
+        raise ValueError(f"max_m {max_m} exceeds the {idx['cell_m']} m cell; the 3x3 search would miss segments")
+    ix, iy = int(lon / idx["dlon"]), int(lat / idx["dlat"])
+    best_name, best_d = None, None
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            for name, a, b in idx["cells"].get((ix + dx, iy + dy), ()):
+                d = geo.seg_point_dist_m(lon, lat, a, b)
+                if best_d is None or d < best_d:
+                    best_name, best_d = name, d
+    if best_d is None or best_d > max_m:
+        return None, None
+    return best_name, best_d
+
+
+def load_street_index(slug, data_dir):
+    """street_index() for a slug from its cached roads.json, or None when roads were never fetched."""
+    path = data_dir / "osm" / slug / "roads.json"
+    if not path.exists():
+        return None
+    return street_index(kept_ways(json.loads(path.read_text())))
 
 
 def _ring_bbox(ring):
@@ -170,6 +233,9 @@ def main():
     ap.add_argument("--town", required=True)
     ap.add_argument("--radius", type=float, default=20.0, help="metres; an image within this of a road sample covers it")
     ap.add_argument("--step", type=float, default=10.0, help="metres between road-centreline samples")
+    ap.add_argument("--roads-only", action="store_true",
+                    help="fetch and cache data/osm/<slug>/roads.json and stop; needs only a bbox, "
+                         "so it works for areas with no OSM boundary relation to clip to")
     args = ap.parse_args()
     slug = slugify(args.town)
     cov_dir = DATA / "coverage" / slug
@@ -177,6 +243,13 @@ def main():
         if not (cov_dir / name).exists():
             sys.exit(f"missing {cov_dir / name}; run coverage.py first")
     bbox = json.load((cov_dir / "summary.json").open())["bbox"]
+
+    raw = osm.fetch_overpass(roads_query(bbox), DATA / "osm" / slug / "roads.json")
+    if args.roads_only:
+        ways = kept_ways(raw)
+        print(f"{slug}: {len(ways)} public-road ways, {sum(1 for w in ways if w.get('name'))} named "
+              f"-> {DATA / 'osm' / slug / 'roads.json'}")
+        return
 
     ring = district.ring(slug)  # the district's cell when slug names one, else the OSM town relation
     # The maintenance split is Marblehead-only: it exists because the Light Department published an
@@ -188,7 +261,6 @@ def main():
     except (FileNotFoundError, SystemExit):
         line = None
 
-    raw = osm.fetch_overpass(roads_query(bbox), DATA / "osm" / slug / "roads.json")
     ways = kept_ways(raw)
     samples = samples_for_ways(ways, ring, args.step)
     for s in samples:

@@ -142,8 +142,28 @@
     return { errors, items };
   }
 
+  // ---- search. Matches a record id (whole or partial), its nearest-street text where the build
+  // carried one, and a "lat, lon" pair typed in. Everything is client side; the biggest area is
+  // under 1,800 records.
+  const COORD_RE = /^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/;
+  const placeText = r => [r.st, r.dbl && r.dbl.street, r.dbl && r.dbl.cross_street].filter(Boolean).join(' ');
+  function matchesQuery(r, q) {
+    const s = String(q || '').trim().toLowerCase();
+    if (!s) return true;
+    if (r.id.toLowerCase().includes(s)) return true;
+    if (placeText(r).toLowerCase().includes(s)) return true;
+    const m = COORD_RE.exec(s);
+    // A typed coordinate is a place, not an identifier: anything within ~150 m of it counts.
+    if (m) { const la = +m[1], lo = +m[2]; return Math.abs(r.lat - la) < 0.0015 && Math.abs(r.lon - lo) < 0.002; }
+    return false;
+  }
+
   const FILTERS = {
     all: r => true,
+    // "Any issue": one or more CONDITION flags. Same predicate as the dataset summary's
+    // condition-issue figure, so the chip count and that number can never disagree. Watch items
+    // (slight lean) and equipment observations (3+ attachments, transformer) are not issues.
+    any: hasConditionIssue,
     lean: possibleLean,
     lean_slight: leanWarning,
     xarm: crossarmDamage,
@@ -165,6 +185,7 @@
       if (state.yearMax != null && (r.shown.year == null || r.shown.year > state.yearMax)) return false;
       if (state.recent === true && !isRecent(r, now)) return false;
       if (typeof state.recent === 'number' && (r.shown.year == null || r.shown.year < state.recent)) return false;  // older year form
+      if (state.q && !matchesQuery(r, state.q)) return false;
       if (state.years && !spansYears(r)) return false;
       if (state.osm && !notInOsm(r)) return false;
       if (state.review && state.review !== 'all') {
@@ -209,5 +230,6 @@
            conditionFlags, hasConditionIssue, leanWarning, warningFlags, hasWarning, conditionUnclear, frameYears, spansYears, notInOsm, OSM_HEADLINE_M,
            RECENT_MONTHS, monthsSince, isRecent, ageLabel, reviewableFlags, flagSupport, REVIEW_VALUES, reviewState, reviewVerdict, reviewProgress, mergeReviews,
            CONDITION_PRIORITY, FLAG_PRIORITY, FILTER_FLAG, orderFlags, primaryFlag,
+           placeText, matchesQuery,
            FILTERS, applyFilters, summary, SORTS };
 });

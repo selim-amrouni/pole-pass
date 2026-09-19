@@ -67,6 +67,7 @@ h2 { font-size: 20px; font-weight: 600; margin: 32px 0 12px; }
 .kind.suburb { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
 .card .n { font-size: 15px; } .card .n b { font-family: var(--mono); font-weight: 500; }
 .card .fresh { font-size: 14px; color: var(--ink-2); }
+.badge { display: inline-block; margin-left: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 4px; background: var(--ok-bg, #edf3e8); border: 1px solid #c3d8b8; color: var(--ok); white-space: nowrap; }
 .card .btn { align-self: flex-start; margin-top: 8px; }
 .empty { color: var(--ink-3); border: 1px dashed var(--line); border-radius: 8px; padding: 18px; grid-column: 1 / -1; }
 

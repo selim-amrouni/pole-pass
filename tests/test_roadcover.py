@@ -9,8 +9,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import geo  # noqa: E402
 from roadcover import (  # noqa: E402
-    coverage_share, kept_ways, quarter_of, street_rows, streets_with_no_coverage,
+    STREET_CELL_M, STREET_MAX_M, coverage_share, kept_ways, nearest_street, quarter_of,
+    street_index, street_rows, streets_with_no_coverage,
 )
 
 
@@ -116,3 +118,96 @@ class QuarterOfTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StreetIndexTest(unittest.TestCase):
+    """The grid index must return exactly what a full scan would; it only exists to be faster."""
+
+    @staticmethod
+    def _scan(lon, lat, ways):
+        """Reference answer: every segment of every named way, no index. Deliberately naive."""
+        best_name, best_d = None, None
+        for w in ways:
+            if not w.get("name"):
+                continue
+            for a, b in zip(w["coords"], w["coords"][1:]):
+                d = geo.seg_point_dist_m(lon, lat, a, b)
+                if best_d is None or d < best_d:
+                    best_name, best_d = w["name"], d
+        return best_name, best_d
+
+    @classmethod
+    def _unique_winner(cls, lon, lat, ways, best_d):
+        """True when exactly one named way achieves the minimum distance (no tie to break)."""
+        at_min = 0
+        for w in ways:
+            if not w.get("name"):
+                continue
+            d = min(geo.seg_point_dist_m(lon, lat, a, b) for a, b in zip(w["coords"], w["coords"][1:]))
+            if abs(d - best_d) < 1e-9:
+                at_min += 1
+        return at_min == 1
+
+    @staticmethod
+    def _grid(lat0=42.5, lon0=-71.1, n=9):
+        """A lattice of named streets, so a point can sit near several of them at once."""
+        ways = []
+        for i in range(n):
+            ways.append({"id": i, "name": f"H{i}", "coords": [(lon0 + j * 0.001, lat0 + i * 0.001) for j in range(n)]})
+            ways.append({"id": 100 + i, "name": f"V{i}", "coords": [(lon0 + i * 0.001, lat0 + j * 0.001) for j in range(n)]})
+        return ways
+
+    def test_matches_a_full_scan_everywhere_on_the_lattice(self):
+        ways = self._grid()
+        idx = street_index(ways)
+        for a in range(17):
+            for b in range(17):
+                lon, lat = -71.1 + a * 0.0005, 42.5 + b * 0.0005
+                got_name, got_d = nearest_street(idx, lon, lat)
+                want_name, want_d = self._scan(lon, lat, ways)
+                if want_d is not None and want_d > STREET_MAX_M:
+                    self.assertIsNone(got_name, f"beyond range at {lon},{lat}")
+                    continue
+                # The distance is the invariant. On a lattice a point can sit exactly between a
+                # horizontal and a vertical street; both names are then equally correct and the two
+                # iteration orders disagree, so only pin the name where the winner is unique.
+                self.assertAlmostEqual(got_d, want_d, places=6, msg=f"at {lon},{lat}")
+                if self._unique_winner(lon, lat, ways, want_d):
+                    self.assertEqual(got_name, want_name, f"at {lon},{lat}")
+
+    def test_works_across_the_meridian_the_equator_and_the_southern_hemisphere(self):
+        # int() truncates toward zero, so negative coordinates are the case a grid index gets wrong.
+        for lon0, lat0 in [(-0.002, 0.0), (0.0, -0.002), (-0.002, -0.002), (179.99, 51.5)]:
+            ways = self._grid(lat0=lat0, lon0=lon0, n=5)
+            idx = street_index(ways)
+            for a in range(9):
+                for b in range(9):
+                    lon, lat = lon0 + a * 0.0005, lat0 + b * 0.0005
+                    got_name, got_d = nearest_street(idx, lon, lat)
+                    want_name, want_d = self._scan(lon, lat, ways)
+                    if want_d is None or want_d > STREET_MAX_M:
+                        self.assertIsNone(got_name, f"at {lon},{lat} near ({lon0},{lat0})")
+                        continue
+                    self.assertAlmostEqual(got_d, want_d, places=6, msg=f"at {lon},{lat} near ({lon0},{lat0})")
+                    if self._unique_winner(lon, lat, ways, want_d):
+                        self.assertEqual(got_name, want_name, f"at {lon},{lat} near ({lon0},{lat0})")
+
+    def test_unnamed_ways_are_ignored_and_empty_input_is_harmless(self):
+        idx = street_index([{"id": 1, "name": None, "coords": [(-71.1, 42.5), (-71.09, 42.5)]}])
+        self.assertEqual(nearest_street(idx, -71.1, 42.5), (None, None))
+        self.assertEqual(nearest_street(street_index([]), -71.1, 42.5), (None, None))
+        self.assertEqual(nearest_street(None, -71.1, 42.5), (None, None))
+
+    def test_nothing_is_claimed_beyond_the_range(self):
+        ways = [{"id": 1, "name": "Far Street", "coords": [(-71.1, 42.5), (-71.09, 42.5)]}]
+        idx = street_index(ways)
+        name, d = nearest_street(idx, -71.1, 42.5001)
+        self.assertEqual(name, "Far Street")
+        self.assertLess(d, STREET_MAX_M)
+        self.assertEqual(nearest_street(idx, -71.1, 42.5100), (None, None), "600 m away: no claim")
+
+    def test_a_radius_past_the_cell_size_is_refused_rather_than_answered_wrongly(self):
+        # Only the 3x3 neighbourhood is searched, so a bigger radius would miss segments in silence.
+        idx = street_index([{"id": 1, "name": "A", "coords": [(-71.1, 42.5), (-71.09, 42.5)]}])
+        with self.assertRaises(ValueError):
+            nearest_street(idx, -71.1, 42.5, max_m=STREET_CELL_M + 1)

@@ -13,7 +13,7 @@
 # Layout on Pages: /<slug>/ per territory; /index.html, /landing.css, /landing.js from web/landing/;
 # /territories.json = the deployed slugs from web/territories.json (name, kind) plus each bundle's
 # summary.json under "stats", which the landing page renders as cards. #pole= links on the root
-# are forwarded to the first slug by landing.js.
+# are forwarded by landing.js to the area named by the id prefix.
 set -euo pipefail
 # Loud on failure: this script is usually run with its output piped, and a pipeline without
 # `pipefail` in the CALLER's shell reports the exit code of `tail`, not of this script. A deploy
@@ -69,7 +69,10 @@ known = {t["slug"]: t for t in json.load(open(src))}
 missing = [s for s in slugs if s not in known]
 if missing:
     sys.exit(f"add to web/territories.json first: {missing}")
-rows = [dict(known[s], stats=json.load(open(f"{out}/{s}/summary.json"))) for s in slugs]
+# Card order on the landing page comes from web/territories.json, not from the order the slugs were
+# typed on the command line -- otherwise the homepage reshuffles depending on how deploy was invoked.
+chosen = set(slugs)
+rows = [dict(known[s], stats=json.load(open(f"{out}/{s}/summary.json"))) for s in known if s in chosen]
 json.dump(rows, open(dst, "w"), indent=1)
 PY
 touch "$tmp/.nojekyll"

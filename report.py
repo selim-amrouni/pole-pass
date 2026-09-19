@@ -31,6 +31,7 @@ from pathlib import Path
 
 import district
 import mvt
+import roadcover
 from PIL import Image
 
 from coverage import DATA, ROOT, slugify
@@ -45,7 +46,14 @@ DEFAULT_CONTACT = "mailto:selim.amrouni@gmail.com"
 # Example record opened on first load, keyed by the detection id of its shown photo (the crop file name), because pole ids
 # are renumbered by every dedupe run. Each chosen after viewing the crop: whole pole, clear, visible equipment, no flag.
 DEFAULT_EXAMPLE = {"greenpoint-brooklyn-new-york": "det:619927453431602",  # wood pole with a terminal box and comm cables
-                   "reading-massachusetts": "det:1387761053001946",        # crossarm, streetlight arm, comm lines, terminal box
+                   # Reading is the landing page's hero (landing.js HERO_SLUG), so its example has to
+                   # SHOW something. The old pick was deliberately unflagged and the caption read
+                   # "No flagged condition on this record", which undersells the whole demo. This one
+                   # is the clearest recent pole in the area: 1040 px of pole, October 2025, a
+                   # transformer the model located a point for, and two marked attachments. An
+                   # equipment observation rather than a condition call -- defensible without
+                   # leaning on the weakest flag type (vegetation) for effect.
+                   "reading-massachusetts": "det:1987770838666454",        # transformer + 2 attachments, Oct 2025
                    "hardwick-vermont": "det:227228208854685",             # pole with crossarm against woods, videolog frame
                    # Marblehead breaks the "no flag" habit on purpose: this area exists to show double
                    # poles, and without an example the landing card renders "No photo published".
@@ -219,7 +227,7 @@ def load_osm(slug, utility_ids):
     return meta, dist
 
 
-def build_records(poles, out_dir, polygons, marks, osm_dist=None):
+def build_records(poles, out_dir, polygons, marks, osm_dist=None, streets=None):
     rows = []
     for p in poles:
         det = Path(p["best_crop"]).stem if p.get("best_crop") else None  # detection id: stable across dedupe runs, unlike the pole id
@@ -267,8 +275,19 @@ def build_records(poles, out_dir, polygons, marks, osm_dist=None):
                        "url": p.get("latest_available_url"), "classified": p.get("latest_available_classified")},
             "frames": frames,
             **({"osm": osm_dist.get(p["pole_id"])} if osm_dist is not None and p["is_utility_pole"] else {}),
+            # Nearest named road from the cached OSM road geometry, so the page can say where a pole
+            # is in words instead of only in coordinates. A proximity inference, not an address and
+            # not a survey: absent when no named road is within roadcover.STREET_MAX_M.
+            **(_street_fields(streets, p) if streets else {}),
         })
     return rows
+
+
+def _street_fields(streets, p):
+    """{"st", "st_m"} for the nearest named road, or {} when there is none within range -- absent
+    rather than null, so the page never has to tell an unknown street from a missing one."""
+    name, d = roadcover.nearest_street(streets, p["lon"], p["lat"])
+    return {"st": name, "st_m": round(d, 1)} if name else {}
 
 
 def resolve_example(key, poles):
@@ -445,7 +464,11 @@ def main():
     marks = load_marks(slug)
     osm_meta, osm_dist = load_osm(slug, [p["pole_id"] for p in poles if p["is_utility_pole"]])
     attribution = f"{ATTRIBUTION} {OSM_ATTRIBUTION}" if osm_meta else ATTRIBUTION
-    rows = build_records(poles, out_dir, load_polygons(slug), marks, osm_dist if osm_meta else None)
+    streets = roadcover.load_street_index(slug, DATA)
+    rows = build_records(poles, out_dir, load_polygons(slug), marks, osm_dist if osm_meta else None, streets)
+    named = sum(1 for r in rows if r.get("st"))
+    print(f"nearest named road for {named} of {len(rows)} records"
+          + ("" if streets else "  (no data/osm/<slug>/roads.json; run 'roadcover.py --town <town> --roads-only' to add street names)"))
     n_partner = partner_boxes(slug, rows)
     n_dbl = publish_double_crops(slug, out_dir, rows)
     version = hashlib.sha1(json.dumps([{k: v for k, v in r.items() if k not in ("shown", "frames")} for r in rows], sort_keys=True).encode()).hexdigest()[:8]

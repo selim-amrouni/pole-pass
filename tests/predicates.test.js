@@ -272,3 +272,53 @@ test('orderFlags leads with the active filter, then falls back to the severity o
   assert.equal(PP.primaryFlag(rec({}), null), null);
   assert.equal(PP.primaryFlag(rec({ util: false, veg: 'touching' }), 'veg'), null);
 });
+
+test('"Any issue" is exactly the condition-flag population the summary counts', () => {
+  const dbl = { pair_id: 'MH-abc12345' };
+  // In: any one of the four condition flags.
+  assert.equal(PP.FILTERS.any(rec({ dbl })), true);
+  assert.equal(PP.FILTERS.any(rec({ lean: 'moderate' })), true);
+  assert.equal(PP.FILTERS.any(rec({ lean: 'severe' })), true);
+  assert.equal(PP.FILTERS.any(rec({ xarm: 'damaged' })), true);
+  assert.equal(PP.FILTERS.any(rec({ veg: 'touching' })), true);
+  // Out: watch items and equipment observations are not condition issues.
+  assert.equal(PP.FILTERS.any(rec({ lean: 'slight' })), false, 'slight lean alone is a watch item');
+  assert.equal(PP.FILTERS.any(rec({ xfmr: true })), false, 'a transformer is not an issue');
+  assert.equal(PP.FILTERS.any(rec({ att: 7 })), false, '3+ attachments is not an issue');
+  assert.equal(PP.FILTERS.any(rec({ veg: 'near' })), false);
+  assert.equal(PP.FILTERS.any(rec({})), false);
+  // It is the same predicate the dataset summary reports, so the two can never disagree.
+  const rows = [rec({ id: 'a', veg: 'touching' }), rec({ id: 'b', lean: 'slight' }), rec({ id: 'c', xfmr: true, att: 5 }),
+                rec({ id: 'd', xarm: 'damaged', lean: 'slight' }), rec({ id: 'e' }), rec({ id: 'f', util: false, veg: 'touching' })];
+  assert.equal(rows.filter(PP.isUtility).filter(PP.FILTERS.any).length, PP.summary(rows).conditionIssues);
+  // No FILTER_FLAG entry: "any" names no single finding, so the panel falls back to severity order.
+  assert.equal(PP.FILTER_FLAG.any, undefined);
+  assert.equal(PP.primaryFlag(rec({ veg: 'touching', xarm: 'damaged' }), 'any'), 'crossarm');
+});
+
+test('search matches id, street text and typed coordinates, and composes with the filters', () => {
+  const r = rec({ id: 'read-01552', st: 'Main Street', lat: 42.5405, lon: -71.1041 });
+  assert.equal(PP.matchesQuery(r, ''), true, 'an empty query filters nothing out');
+  assert.equal(PP.matchesQuery(r, '   '), true);
+  assert.equal(PP.matchesQuery(r, 'read-01552'), true);
+  assert.equal(PP.matchesQuery(r, '01552'), true, 'partial id');
+  assert.equal(PP.matchesQuery(r, 'READ'), true, 'case-insensitive');
+  assert.equal(PP.matchesQuery(r, 'main'), true, 'street text');
+  assert.equal(PP.matchesQuery(r, 'Main Street'), true);
+  assert.equal(PP.matchesQuery(r, '42.5405, -71.1041'), true, 'typed coordinates');
+  assert.equal(PP.matchesQuery(r, '42.5405 -71.1041'), true, 'space-separated coordinates');
+  assert.equal(PP.matchesQuery(r, '40.0, -71.1'), false, 'a distant coordinate does not match');
+  assert.equal(PP.matchesQuery(r, 'elm'), false);
+  // An intersection from the double-pole pass is searchable too.
+  assert.equal(PP.matchesQuery(rec({ id: 'marb-1', dbl: { pair_id: 'p', street: 'Harbor Avenue', cross_street: 'Nanepashemet Street' } }), 'nanepashemet'), true);
+  // A record with no street text at all is still findable by id and never throws.
+  assert.equal(PP.matchesQuery(rec({ id: 'hard-00001' }), 'hard-00001'), true);
+  assert.equal(PP.matchesQuery(rec({ id: 'hard-00001' }), 'main'), false);
+  // applyFilters ANDs the query with everything else.
+  const rows = [rec({ id: 'read-1', st: 'Main Street', veg: 'touching' }), rec({ id: 'read-2', st: 'Main Street' }),
+                rec({ id: 'read-3', st: 'Elm Street', veg: 'touching' })];
+  const f = st => PP.applyFilters(rows, Object.assign({ flag: 'all', q: '', now: Date.now() }, st)).map(r2 => r2.id);
+  assert.deepEqual(f({ q: 'main' }), ['read-1', 'read-2']);
+  assert.deepEqual(f({ q: 'main', flag: 'any' }), ['read-1']);
+  assert.deepEqual(f({ flag: 'any' }), ['read-1', 'read-3']);
+});

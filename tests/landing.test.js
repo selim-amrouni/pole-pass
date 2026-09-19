@@ -61,10 +61,10 @@ test('hero uses the preferred area example, draws at most three observations, li
   assert.ok(frame.innerHTML.includes('reading-massachusetts/crops/read-00070.jpg'));
   assert.ok(cap.innerHTML.includes('reading-massachusetts/#pole=read-00070') && cap.innerHTML.includes('photo 2025-10') && cap.innerHTML.includes('Mapillary'));
   assert.ok(!cap.innerHTML.includes('verified'), 'no validation claim');
-  // marks: axis + 2 attachments; the third attachment and the transformer are dropped (three observations at most)
+  // marks: axis, transformer, then one attachment -- three observations at most, most telling first
   assert.equal(PL.renderHero([LIST[0]], frame, cap), 'greenpoint-brooklyn-new-york');
-  assert.equal((frame.innerHTML.match(/class="mk att"/g) || []).length, 2);
-  assert.ok(frame.innerHTML.includes('class="axis"') && !frame.innerHTML.includes('class="mk xfmr"'));
+  assert.ok(frame.innerHTML.includes('class="axis"') && frame.innerHTML.includes('class="mk xfmr"'));
+  assert.equal((frame.innerHTML.match(/class="mk att"/g) || []).length, 1, 'the budget is spent on the transformer first');
   assert.ok(frame.innerHTML.includes('Model observations'));
   assert.equal(PL.renderHero([LIST[1], LIST[3]], frame, cap), null);
   assert.ok(frame.innerHTML.includes('Example photo unavailable'));
@@ -84,4 +84,48 @@ test('escapes names and forwards #pole= links to the first territory', () => {
   assert.equal(PL.forwardPoleLink(LIST, { hash: '#pole=gree-00062' }), 'greenpoint-brooklyn-new-york/#pole=gree-00062');
   assert.equal(PL.forwardPoleLink(LIST, { hash: '' }), null);
   assert.equal(PL.forwardPoleLink([], { hash: '#pole=x' }), null);
+});
+
+test('one "Best imagery" badge goes to the area with the most recent photos, by measurement', () => {
+  const { PL, document } = boot();
+  // Greenpoint 50%, Hardwick 0%, Reading 80%, Nowhere unknown -> Reading wins on the data.
+  assert.equal(PL.bestImagery(LIST, NOW), 'reading-massachusetts');
+  const el = document.getElementById('cards');
+  PL.render(LIST, el, NOW);
+  const badges = el.querySelectorAll('.badge');
+  assert.equal(badges.length, 1, 'exactly one card is badged, never all of them');
+  const carrying = el.querySelectorAll('.card').filter(c => c.querySelectorAll('.badge').length);
+  assert.equal(carrying[0].dataset.slug, 'reading-massachusetts');
+  // Nothing recent anywhere: no badge rather than a meaningless winner.
+  assert.equal(PL.bestImagery([LIST[1]], NOW), null);
+  assert.equal(PL.cardHtml(LIST[0], NOW).includes('Best imagery'), false, 'two-arg callers render no badge');
+});
+
+test('a root #pole= link goes to the area its id names, not to whichever card is first', () => {
+  const { PL } = boot();
+  // Record ids are "<first 4 of slug>-NNNNN"; the cards were reordered, so position means nothing.
+  assert.equal(PL.forwardPoleLink(LIST, { hash: '#pole=gree-00062' }), 'greenpoint-brooklyn-new-york/#pole=gree-00062');
+  assert.equal(PL.forwardPoleLink(LIST, { hash: '#pole=read-00070' }), 'reading-massachusetts/#pole=read-00070');
+  assert.equal(PL.forwardPoleLink(LIST, { hash: '#pole=hard-00001&issue=any' }), 'hardwick-vermont/#pole=hard-00001&issue=any');
+  // An id from no known area still lands somewhere rather than dropping the link.
+  assert.equal(PL.forwardPoleLink(LIST, { hash: '#pole=zzzz-1' }), 'greenpoint-brooklyn-new-york/#pole=zzzz-1');
+  // A malformed percent-escape must not throw: decodeURIComponent('%') does, and this runs inside
+  // the fetch .then(), so the rejection reached the catch and rendered "No areas are published yet"
+  // over a site that has five. An empty state is a claim here, so it must never be an accident.
+  assert.doesNotThrow(() => PL.forwardPoleLink(LIST, { hash: '#pole=%' }));
+  assert.equal(PL.forwardPoleLink(LIST, { hash: '#pole=%E0%A4%A' }), 'greenpoint-brooklyn-new-york/#pole=%E0%A4%A');
+  assert.equal(PL.forwardPoleLink(LIST, { hash: '#pole=read%2D00070' }), 'reading-massachusetts/#pole=read%2D00070', 'a valid escape still decodes');
+});
+
+test('the hero caption says what the model found instead of leading with an absence', () => {
+  const { PL, document } = boot();
+  const frame = document.getElementById('hero-frame'), cap = document.getElementById('hero-cap');
+  PL.renderHero([LIST[0]], frame, cap);
+  // The fixture has three attachments and a transformer; only one attachment circle fits inside the
+  // three-mark render budget. The caption must report the finding, not the number of markers drawn.
+  assert.equal((frame.innerHTML.match(/class="mk att"/g) || []).length, 1, 'one circle drawn');
+  assert.match(cap.innerHTML, /Model identified a transformer and 3 attachments on this pole/);
+  assert.match(cap.innerHTML, /Markers are model observations, not measurements/, 'the caveat stays');
+  assert.match(cap.innerHTML, /Mapillary/, 'attribution stays');
+  assert.ok(!/No flagged condition/.test(cap.innerHTML));
 });

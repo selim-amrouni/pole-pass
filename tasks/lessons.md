@@ -247,3 +247,26 @@ fits. Two extra details made it work: the containers wrap rather than overflow, 
 test is a height/position comparison and not `scrollWidth > clientWidth`; and the first
 measurement runs before the web font swaps in, which reports the wrong width, so it has
 to be repeated on `document.fonts.ready`.
+
+## The cache you assume exists (2026-09-18)
+A subagent auditing where street text lives reported that `data/osm/<slug>/roads.json` "exists for
+greenpoint, hardwick, reading, marblehead, and newton-lower-falls". It exists for two of those. I
+had already put a decision to the owner premised on "no API calls needed", and only caught it when
+I went to read the file and `ls` showed three of the five missing — the three that had no street
+text, which is of course *why* they had none.
+
+**Pattern:** a subagent asked "does X exist for each area?" will sometimes answer from the shape of
+the pipeline rather than from the filesystem. Any claim of the form "this is cached for all N" is
+worth one `ls` before it is spent on a decision, especially when the claim is load-bearing for a
+question you are about to ask someone else. The tell here was available for free: the areas said to
+have road data were exactly the areas with no street names, which should not both be true.
+
+## Ordering a list in two places (2026-09-18)
+Reordering the homepage cards meant editing `web/territories.json` — but `deploy.sh` built the
+deployed `territories.json` from the order the slugs were typed on the command line, so the file was
+not actually the source of truth, and `landing.js` separately forwarded legacy `#pole=` links to
+`list[0]`, which silently became a different area the moment the order changed.
+
+**Pattern:** when a list gains a meaningful order, grep for every consumer that indexes into it or
+rebuilds it. Two were wrong here, and neither would have failed a test — one produces a different
+homepage depending on the deploy command, the other sends old shared links to the wrong town.
